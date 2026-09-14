@@ -1,1 +1,16 @@
 
+{
+  "name": "QuickScan DB",
+  "short_name": "QuickScan",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#042219",
+  "theme_color": "#042219",
+  "icons": [
+    {
+      "src": "https://base44.com/logo_v2.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
