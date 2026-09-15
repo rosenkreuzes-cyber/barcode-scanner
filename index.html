@@ -10,25 +10,66 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    /* A4 縦サイズ印刷用のCSS設定 */
+    @media print {
+      body {
+        background-color: white !important;
+        color: black !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .print-area {
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 8mm !important;
+        box-shadow: none !important;
+      }
+      @page {
+        size: A4 portrait;
+        margin: 0;
+      }
+    }
+
+    /* E列 180px制限＋テキスト溢れ防止（CSS Container Queries / Fit） */
+    .col-e-cell {
+      width: 180px !important;
+      max-width: 180px !important;
+      min-width: 180px !important;
+      word-break: break-all;
+      font-size: clamp(8px, 1.2vw, 12px);
+      line-height: 1.1;
+      overflow: hidden;
+    }
+
+    /* 行高さ 24px 固定 */
+    .row-h-24 {
+      height: 24px !important;
+      max-height: 24px !important;
+    }
+  </style>
 </head>
-<body class="bg-[#042219] text-[#E6DAA6] select-none">
+<body class="bg-[#042219] text-[#E6DAA6] select-none text-base">
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect } = React;
 
     function App() {
-      // 1. ヘッダー情報ステート
+      // 1. ヘッダー基本情報
       const [headerInfo, setHeaderInfo] = useState({
-        docNo: '',       // 製造指図書No
-        modelName: '',   // 機種名
-        entryDate: '',   // 記入日
-        customer: '',    // 客先名
-        unitNo: '',      // 号機No
-        orderQty: '',    // 発注台数
-        elecStaff: ''    // エレキ担当者
+        docNo: '',       // 製造指図書No (大文字)
+        modelName: '',   // 機種名 (大文字)
+        entryDate: '',   // 記入日 (自動取得)
+        customer: '',    // 客先名 (大文字)
+        unitNo: '',      // 号機No (数値)
+        orderQty: '',    // 発注台数 (数値)
+        elecStaff: ''    // エレキ担当者 (大文字)
       });
 
+      // 本日の日付を自動取得
       useEffect(() => {
         const today = new Date();
         const year = today.getFullYear();
@@ -42,10 +83,11 @@
       };
 
       const handleNumberChange = (field, value) => {
-        setHeaderInfo(prev => ({ ...prev, [field]: value.replace(/[^0-9]/g, '') }));
+        const numOnly = value.replace(/[^0-9]/g, '');
+        setHeaderInfo(prev => ({ ...prev, [field]: numOnly }));
       };
 
-      // 2. ユニット・サーボパック状態
+      // ユニット・サーボパック
       const [units, setUnits] = useState([
         { id: 'power', label: '電源ユニット', model: 'JPMC-PSD3012N', serial: '', axis: '', remarks: '' },
         { id: 'cpu', label: 'CPU', model: 'JPMC-CP3202N-E', serial: '', axis: '', remarks: '' },
@@ -57,12 +99,17 @@
         { id: 'servo_1', label: 'サーボパック 1', model: '', serial: '', axis: '', remarks: '' }
       ]);
 
-      // Step 0: スタート, 1-4: 固定ユニット, 5+: サーボパック, 99: プレビュー画面
       const [currentStep, setCurrentStep] = useState(0);
 
       const handleClearData = () => {
         setHeaderInfo(prev => ({
-          docNo: '', modelName: '', entryDate: prev.entryDate, customer: '', unitNo: '', orderQty: '', elecStaff: ''
+          docNo: '',
+          modelName: '',
+          entryDate: prev.entryDate,
+          customer: '',
+          unitNo: '',
+          orderQty: '',
+          elecStaff: ''
         }));
         setUnits(units.map(u => ({ ...u, serial: '', axis: '', remarks: '' })));
         setServoPacks([{ id: 'servo_1', label: 'サーボパック 1', model: '', serial: '', axis: '', remarks: '' }]);
@@ -86,7 +133,10 @@
         const newPack = {
           id: `servo_${Date.now()}`,
           label: `サーボパック ${servoPacks.length + 1}`,
-          model: '', serial: '', axis: '', remarks: ''
+          model: '',
+          serial: '',
+          axis: '',
+          remarks: ''
         };
         setServoPacks([...servoPacks, newPack]);
       };
@@ -97,111 +147,116 @@
         setServoPacks(updated);
       };
 
+      // 印刷処理（Sharpdesk Mobile連携・ブラウザ標準印刷）
+      const handlePrint = () => {
+        window.print();
+      };
+
       // ----------------------------------------------------
-      // Step 0: スタート（基本情報入力）
+      // ① スタート（ヘッダー情報入力）画面（全体的に大きく表示）
       // ----------------------------------------------------
       if (currentStep === 0) {
         return (
-          <div className="min-h-screen p-4 flex flex-col justify-between max-w-md mx-auto">
+          <div className="min-h-screen p-5 flex flex-col justify-between max-w-lg mx-auto">
             <div>
-              <div className="text-center my-4">
-                <h1 className="text-2xl font-bold tracking-wider text-[#F5D887]">QuickScan DB</h1>
-                <p className="text-xs text-[#E6DAA6]/60 mt-1">基本情報の入力</p>
+              <div className="text-center my-6">
+                <h1 className="text-3xl font-bold tracking-wider text-[#F5D887]">QuickScan DB</h1>
+                <p className="text-sm text-[#E6DAA6]/70 mt-2">基本情報の入力</p>
               </div>
 
-              <div className="space-y-3 bg-[#093325]/40 p-4 rounded-xl border border-[#E6DAA6]/20">
+              <div className="space-y-4 bg-[#093325]/40 p-5 rounded-2xl border border-[#E6DAA6]/30 shadow-lg">
                 <div>
-                  <label className="block text-xs text-[#E6DAA6]/80 mb-1">製造指図書No</label>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">製造指図書No</label>
                   <input
                     type="text"
                     value={headerInfo.docNo}
                     onChange={(e) => handleUppercaseChange('docNo', e.target.value)}
                     placeholder="例: ORD-2026-X"
-                    className="w-full bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
+                    className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-[#E6DAA6]/80 mb-1">機種名</label>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">機種名</label>
                   <input
                     type="text"
                     value={headerInfo.modelName}
                     onChange={(e) => handleUppercaseChange('modelName', e.target.value)}
                     placeholder="例: MODEL-A100"
-                    className="w-full bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
+                    className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-[#E6DAA6]/80 mb-1">記入日（自動取得）</label>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">記入日（自動取得）</label>
                   <input
                     type="text"
                     readOnly
                     value={headerInfo.entryDate}
-                    className="w-full bg-[#093325]/50 border border-[#E6DAA6]/20 rounded-lg px-3 py-2 text-sm text-[#E6DAA6]/70 cursor-not-allowed"
+                    className="w-full bg-[#093325]/50 border border-[#E6DAA6]/20 rounded-xl px-4 py-3 text-base text-[#E6DAA6]/70 cursor-not-allowed"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-[#E6DAA6]/80 mb-1">客先名</label>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">客先名</label>
                   <input
                     type="text"
                     value={headerInfo.customer}
                     onChange={(e) => handleUppercaseChange('customer', e.target.value)}
                     placeholder="例: TANAKA CORP"
-                    className="w-full bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
+                    className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-[#E6DAA6]/80 mb-1">号機NO.</label>
+                    <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">号機NO.</label>
                     <input
                       type="text"
                       inputMode="numeric"
                       value={headerInfo.unitNo}
                       onChange={(e) => handleNumberChange('unitNo', e.target.value)}
                       placeholder="数字のみ"
-                      className="w-full bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6] focus:outline-none focus:border-[#F5D887]"
+                      className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] focus:outline-none focus:border-[#F5D887]"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-[#E6DAA6]/80 mb-1">発注台数</label>
+                    <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">発注台数</label>
                     <input
                       type="text"
                       inputMode="numeric"
                       value={headerInfo.orderQty}
                       onChange={(e) => handleNumberChange('orderQty', e.target.value)}
                       placeholder="数字のみ"
-                      className="w-full bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6] focus:outline-none focus:border-[#F5D887]"
+                      className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] focus:outline-none focus:border-[#F5D887]"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs text-[#E6DAA6]/80 mb-1">エレキ担当者</label>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">エレキ担当者</label>
                   <input
                     type="text"
                     value={headerInfo.elecStaff}
                     onChange={(e) => handleUppercaseChange('elecStaff', e.target.value)}
                     placeholder="例: YAMADA"
-                    className="w-full bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
+                    className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="pt-4 space-y-3">
+            <div className="pt-6 space-y-3">
               <button
                 onClick={() => setCurrentStep(1)}
-                className="w-full bg-[#F5D887] text-[#042219] font-bold py-3.5 rounded-full text-base active:scale-95 transition-all shadow-lg"
+                className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg active:scale-95 transition-all shadow-xl"
               >
                 次へ（ユニット入力）
               </button>
 
               <button
                 onClick={handleClearData}
-                className="w-full border border-red-500/50 text-red-400 py-2.5 rounded-lg text-sm hover:bg-red-950/20 active:scale-95 transition-all"
+                className="w-full border border-red-500/50 text-red-400 py-3 rounded-xl text-base hover:bg-red-950/20 active:scale-95 transition-all"
               >
                 入力情報をクリア
               </button>
@@ -211,33 +266,33 @@
       }
 
       // ----------------------------------------------------
-      // Step 1-4: 固定ユニット入力
+      // 固定ユニット入力画面 (Step 1 - 4)
       // ----------------------------------------------------
       if (currentStep >= 1 && currentStep <= 4) {
         const uIndex = currentStep - 1;
         const unit = units[uIndex];
 
         return (
-          <div className="min-h-screen p-4 flex flex-col justify-between max-w-md mx-auto">
+          <div className="min-h-screen p-5 flex flex-col justify-between max-w-lg mx-auto">
             <div>
-              <div className="flex justify-between items-center text-sm mb-4">
-                <button onClick={() => setCurrentStep(currentStep - 1)} className="text-[#E6DAA6]/80">← 前へ</button>
-                <span className="text-xs font-mono">{currentStep} / {4 + servoPacks.length}</span>
+              <div className="flex justify-between items-center text-base mb-6">
+                <button onClick={() => setCurrentStep(currentStep - 1)} className="text-[#E6DAA6] font-medium">← 前へ</button>
+                <span className="text-sm font-mono bg-[#093325] px-3 py-1 rounded-full">{currentStep} / {4 + servoPacks.length}</span>
               </div>
 
               <div className="text-center mb-6">
-                <h2 className="text-xl font-bold">{unit.label}</h2>
-                <p className="text-xs text-[#E6DAA6]/60">{unit.model}</p>
+                <h2 className="text-2xl font-bold text-[#F5D887]">{unit.label}</h2>
+                <p className="text-sm text-[#E6DAA6]/70 mt-1">{unit.model}</p>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs mb-1">製品型式</label>
+                  <label className="block text-sm mb-1">製品型式</label>
                   <input
                     type="text"
                     disabled
                     value={unit.model}
-                    className="w-full bg-[#093325]/50 border border-[#E6DAA6]/20 rounded-lg px-3 py-2 text-sm text-[#E6DAA6]/70"
+                    className="w-full bg-[#093325]/50 border border-[#E6DAA6]/20 rounded-xl px-4 py-3 text-base text-[#E6DAA6]/70"
                   />
                 </div>
 
@@ -247,18 +302,18 @@
                   { key: 'remarks', label: '備考' }
                 ].map(({ key, label }) => (
                   <div key={key}>
-                    <label className="block text-xs mb-1">{label}</label>
+                    <label className="block text-sm mb-1">{label}</label>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         value={unit[key]}
                         onChange={(e) => handleUnitChange(uIndex, key, e.target.value)}
                         placeholder="入力またはスキャン"
-                        className="flex-1 bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6]"
+                        className="flex-1 bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6]"
                       />
                       <button
                         onClick={() => handleUnitChange(uIndex, key, `SN-${Math.floor(100000 + Math.random() * 900000)}`)}
-                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-lg px-3 py-2"
+                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-lg"
                       >
                         📷
                       </button>
@@ -271,7 +326,7 @@
             <div className="pt-6">
               <button
                 onClick={() => setCurrentStep(currentStep + 1)}
-                className="w-full bg-[#F5D887] text-[#042219] font-bold py-3.5 rounded-full text-base active:scale-95 transition-all"
+                className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg active:scale-95 transition-all"
               >
                 次へ
               </button>
@@ -281,23 +336,25 @@
       }
 
       // ----------------------------------------------------
-      // Step 5〜: サーボパック入力
+      // サーボパック入力画面 (Step 5 〜)
       // ----------------------------------------------------
-      if (currentStep >= 5 && currentStep < 5 + servoPacks.length) {
-        const servoIndex = currentStep - 5;
+      const servoIndex = currentStep - 5;
+      const totalSteps = 4 + servoPacks.length;
+
+      if (currentStep >= 5 && currentStep <= totalSteps) {
         const currentPack = servoPacks[servoIndex];
 
         return (
-          <div className="min-h-screen p-4 flex flex-col justify-between max-w-md mx-auto">
+          <div className="min-h-screen p-5 flex flex-col justify-between max-w-lg mx-auto">
             <div>
-              <div className="flex justify-between items-center text-sm mb-4">
-                <button onClick={() => setCurrentStep(currentStep - 1)} className="text-[#E6DAA6]/80">← 前へ</button>
-                <span className="text-xs font-mono">{currentStep} / {4 + servoPacks.length}</span>
+              <div className="flex justify-between items-center text-base mb-6">
+                <button onClick={() => setCurrentStep(currentStep - 1)} className="text-[#E6DAA6] font-medium">← 前へ</button>
+                <span className="text-sm font-mono bg-[#093325] px-3 py-1 rounded-full">{currentStep} / {totalSteps}</span>
               </div>
 
               <div className="text-center mb-6">
-                <h2 className="text-xl font-bold">{currentPack.label}</h2>
-                <p className="text-xs text-[#E6DAA6]/60">サーボパック情報のスキャン・入力</p>
+                <h2 className="text-2xl font-bold text-[#F5D887]">{currentPack.label}</h2>
+                <p className="text-sm text-[#E6DAA6]/70 mt-1">サーボパック情報のスキャン・入力</p>
               </div>
 
               <div className="space-y-4">
@@ -308,18 +365,18 @@
                   { key: 'remarks', label: '備考' }
                 ].map(({ key, label }) => (
                   <div key={key}>
-                    <label className="block text-xs mb-1">{label}</label>
+                    <label className="block text-sm mb-1">{label}</label>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         value={currentPack[key]}
                         onChange={(e) => handleServoChange(servoIndex, key, e.target.value)}
                         placeholder="入力またはスキャン"
-                        className="flex-1 bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6]"
+                        className="flex-1 bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6]"
                       />
                       <button
                         onClick={() => handleServoChange(servoIndex, key, `SN-${Math.floor(100000 + Math.random() * 900000)}`)}
-                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-lg px-3 py-2"
+                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-lg"
                       >
                         📷
                       </button>
@@ -328,17 +385,17 @@
                 ))}
               </div>
 
-              <div className="mt-6 flex gap-2">
+              <div className="mt-6 flex gap-3">
                 <button
                   onClick={handleAddServo}
-                  className="flex-1 border border-dashed border-[#E6DAA6]/60 text-[#E6DAA6] rounded-lg py-2.5 text-sm"
+                  className="flex-1 border border-dashed border-[#E6DAA6]/70 text-[#E6DAA6] rounded-xl py-3 text-base font-medium"
                 >
                   ＋ サーボパックを追加
                 </button>
                 {servoPacks.length > 1 && (
                   <button
                     onClick={() => handleRemoveServo(servoIndex)}
-                    className="border border-red-500/40 text-red-400 rounded-lg px-3 py-2.5 text-sm"
+                    className="border border-red-500/50 text-red-400 rounded-xl px-4 py-3 text-base"
                   >
                     削除
                   </button>
@@ -348,16 +405,10 @@
 
             <div className="pt-6">
               <button
-                onClick={() => {
-                  if (servoIndex < servoPacks.length - 1) {
-                    setCurrentStep(currentStep + 1);
-                  } else {
-                    setCurrentStep(99); // プレビュー画面へ移動！
-                  }
-                }}
-                className="w-full bg-[#F5D887] text-[#042219] font-bold py-3.5 rounded-full text-base active:scale-95 transition-all"
+                onClick={() => setCurrentStep(currentStep + 1)}
+                className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg active:scale-95 transition-all"
               >
-                {servoIndex < servoPacks.length - 1 ? '次のサーボパックへ' : 'プレビューへ'}
+                {servoIndex < servoPacks.length - 1 ? '次のサーボパックへ' : 'プレビュー（印刷）へ'}
               </button>
             </div>
           </div>
@@ -365,104 +416,103 @@
       }
 
       // ----------------------------------------------------
-      // Step 99: 入力結果プレビュー画面（Excelセル表現）
+      // ③〜⑥ 入力結果プレビュー画面（A4縦・25行固定・E列180px制限・Sharpdesk印刷対応）
       // ----------------------------------------------------
-      const allRows = [...units, ...servoPacks];
+      // No.1〜25 までの全データをマージ構築
+      const allRows = [];
+      
+      // 1. 固定ユニット
+      units.forEach(u => {
+        allRows.push({ name: u.label, model: u.model, serial: u.serial, axis: u.axis, remarks: u.remarks });
+      });
+
+      // 2. サーボパック
+      servoPacks.forEach(s => {
+        allRows.push({ name: s.label, model: s.model, serial: s.serial, axis: s.axis, remarks: s.remarks });
+      });
+
+      // 3. No.25 まで空行を充填 (④No25まで入力が無くても表示)
+      while (allRows.length < 25) {
+        allRows.push({ name: '', model: '', serial: '', axis: '', remarks: '' });
+      }
 
       return (
-        <div className="min-h-screen p-3 flex flex-col justify-between max-w-md mx-auto text-[#042219]">
-          <div>
-            <div className="flex items-center mb-3">
-              <button onClick={() => setCurrentStep(4 + servoPacks.length)} className="text-[#E6DAA6] text-sm">
-                ← 戻る
+        <div className="min-h-screen bg-gray-100 text-black p-2 sm:p-6 flex flex-col items-center">
+          
+          {/* 操作ボタンエリア (画面のみ表示) */}
+          <div className="no-print w-full max-w-4xl flex justify-between items-center mb-4 bg-[#042219] p-4 rounded-xl text-[#E6DAA6]">
+            <button
+              onClick={() => setCurrentStep(totalSteps)}
+              className="px-4 py-2 bg-[#093325] border border-[#E6DAA6]/40 rounded-lg text-sm"
+            >
+              ← 入力に戻る
+            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handlePrint}
+                className="px-6 py-2.5 bg-[#F5D887] text-[#042219] font-bold rounded-lg text-sm shadow-md active:scale-95 transition-all flex items-center gap-2"
+              >
+                <span>🖨️</span>
+                <span>印刷 (Sharpdesk Mobile / PDF)</span>
               </button>
-            </div>
-
-            <div className="text-center mb-3 text-[#E6DAA6]">
-              <h2 className="text-xl font-bold">入力結果プレビュー</h2>
-              <p className="text-[10px] text-[#E6DAA6]/70">Excelのセル配置を確認してください (黄色=入力セル)</p>
-            </div>
-
-            {/* Excelスプレッドシートデザイン */}
-            <div className="bg-white rounded border border-gray-400 overflow-x-auto text-[11px]">
-              <table className="w-full border-collapse text-center">
-                <thead>
-                  <tr className="bg-gray-100 border-b border-gray-300 font-mono text-[10px] text-gray-500">
-                    <th className="border-r border-gray-300 w-6 py-0.5"></th>
-                    <th className="border-r border-gray-300 w-12">B</th>
-                    <th className="border-r border-gray-300 w-24">C</th>
-                    <th className="border-r border-gray-300 w-16">E</th>
-                    <th className="border-r border-gray-300 w-16">G</th>
-                    <th className="w-12">H</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-300">
-                  <tr className="bg-gray-50 font-bold border-b border-gray-400">
-                    <td className="bg-gray-100 border-r border-gray-300 text-gray-500 font-mono text-[9px]">1</td>
-                    <td colSpan="5" className="text-left px-2 py-1 text-xs">製品シリアル記入シート</td>
-                  </tr>
-
-                  <tr>
-                    <td className="bg-gray-100 border-r border-gray-300 text-gray-500 font-mono text-[9px]">3</td>
-                    <td className="border-r border-gray-300 bg-gray-50 px-1 py-1 text-[10px] font-medium">製造指図書No</td>
-                    <td className="border-r border-gray-300 bg-[#FEF9C3] px-1 font-mono text-left">{headerInfo.docNo}</td>
-                    <td className="border-r border-gray-300 bg-gray-50 px-1 text-[10px] font-medium">客先名</td>
-                    <td colSpan="2" className="bg-[#FEF9C3] px-1 font-mono text-left">{headerInfo.customer}</td>
-                  </tr>
-
-                  <tr>
-                    <td className="bg-gray-100 border-r border-gray-300 text-gray-500 font-mono text-[9px]">4</td>
-                    <td className="border-r border-gray-300 bg-gray-50 px-1 py-1 text-[10px] font-medium">機種名</td>
-                    <td className="border-r border-gray-300 bg-[#FEF9C3] px-1 font-mono text-left">{headerInfo.modelName}</td>
-                    <td className="border-r border-gray-300 bg-gray-50 px-1 text-[9px] font-medium leading-tight">号機NO./発注台数</td>
-                    <td className="border-r border-gray-300 bg-[#FEF9C3] px-1 font-mono">{headerInfo.unitNo}</td>
-                    <td className="bg-[#FEF9C3] px-1 font-mono">{headerInfo.orderQty}</td>
-                  </tr>
-
-                  <tr className="border-b-2 border-gray-400">
-                    <td className="bg-gray-100 border-r border-gray-300 text-gray-500 font-mono text-[9px]">5</td>
-                    <td className="border-r border-gray-300 bg-gray-50 px-1 py-1 text-[10px] font-medium">記入日</td>
-                    <td className="border-r border-gray-300 px-1 font-mono text-left">{headerInfo.entryDate}</td>
-                    <td className="border-r border-gray-300 bg-gray-50 px-1 text-[9px] font-medium leading-tight">エレキ担当者</td>
-                    <td colSpan="2" className="bg-[#FEF9C3] px-1 font-mono text-left">{headerInfo.elecStaff}</td>
-                  </tr>
-
-                  {/* 表ヘッダー */}
-                  <tr className="bg-gray-100 font-medium text-[10px] border-b border-gray-400">
-                    <td className="border-r border-gray-300 text-gray-500 font-mono text-[9px]">7</td>
-                    <td className="border-r border-gray-300 px-0.5 py-1">NO.</td>
-                    <td className="border-r border-gray-300 px-1">製品型式</td>
-                    <td className="border-r border-gray-300 px-1">シリアルNO.</td>
-                    <td className="border-r border-gray-300 px-1">軸名称</td>
-                    <td className="px-1">備考</td>
-                  </tr>
-
-                  {/* データ行 */}
-                  {allRows.map((item, idx) => (
-                    <tr key={item.id || idx} className="text-[10px]">
-                      <td className="bg-gray-100 border-r border-gray-300 text-gray-500 font-mono text-[9px] py-1.5">{8 + idx}</td>
-                      <td className="border-r border-gray-300 bg-[#FEF9C3] font-mono">{idx + 1}</td>
-                      <td className="border-r border-gray-300 bg-[#FEF9C3] px-1 font-mono text-left break-all text-[9px] leading-tight">{item.model}</td>
-                      <td className="border-r border-gray-300 bg-[#FEF9C3] px-1 font-mono text-left break-all text-[9px]">{item.serial}</td>
-                      <td className="border-r border-gray-300 bg-[#FEF9C3] px-1 font-mono text-left">{item.axis}</td>
-                      <td className="bg-[#FEF9C3] px-1 font-mono text-left">{item.remarks}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           </div>
 
-          <div className="pt-4">
-            <button
-              onClick={() => {
-                alert('保存処理が完了しました');
-                setCurrentStep(0);
-              }}
-              className="w-full bg-[#F5D887] text-[#042219] font-bold py-3.5 rounded-full text-base active:scale-95 transition-all shadow-lg"
-            >
-              確定・データ保存
-            </button>
+          {/* A4 プレビューエリア (③ A4縦・余白少なめ 8mm) */}
+          <div className="print-area bg-white text-black w-full max-w-[210mm] p-[8mm] shadow-2xl rounded-sm border border-gray-300 font-sans">
+            
+            {/* プレビューヘッダー */}
+            <div className="text-center border-b-2 border-black pb-2 mb-3">
+              <h1 className="text-xl font-bold tracking-widest uppercase">構成機器データシート</h1>
+            </div>
+
+            {/* 基本情報グリッド */}
+            <div className="grid grid-cols-4 gap-x-2 gap-y-1 text-xs mb-3 border border-black p-2 bg-gray-50">
+              <div><span className="font-bold">製造指図書No:</span> {headerInfo.docNo}</div>
+              <div><span className="font-bold">機種名:</span> {headerInfo.modelName}</div>
+              <div><span className="font-bold">記入日:</span> {headerInfo.entryDate}</div>
+              <div><span className="font-bold">客先名:</span> {headerInfo.customer}</div>
+              <div><span className="font-bold">号機No:</span> {headerInfo.unitNo}</div>
+              <div><span className="font-bold">発注台数:</span> {headerInfo.orderQty}</div>
+              <div className="col-span-2"><span className="font-bold">エレキ担当者:</span> {headerInfo.elecStaff}</div>
+            </div>
+
+            {/* テーブル (No.1 〜 No.25) */}
+            <table className="w-full border-collapse border border-black text-xs">
+              <thead>
+                <tr className="bg-gray-200 border-b border-black text-center h-7">
+                  <th className="border border-black w-10">No</th>
+                  <th className="border border-black">ユニット / 機器名</th>
+                  <th className="border border-black">製品型式</th>
+                  <th className="border border-black col-e-cell">シリアルNo (E列:180px)</th>
+                  <th className="border border-black w-20">軸名称</th>
+                  <th className="border border-black">備考</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allRows.slice(0, 25).map((row, idx) => (
+                  <tr key={idx} className="row-h-24 border-b border-black text-center leading-none">
+                    {/* ⑤ 行高さ 24px */}
+                    <td className="border border-black font-mono text-[11px]">{idx + 1}</td>
+                    <td className="border border-black text-left px-1 truncate max-w-[120px]">{row.name}</td>
+                    <td className="border border-black text-left px-1 truncate max-w-[120px]">{row.model}</td>
+                    {/* ② E列 180px制限＋文字自動縮小 */}
+                    <td className="border border-black col-e-cell px-1 font-mono font-semibold">
+                      {row.serial}
+                    </td>
+                    <td className="border border-black px-1 truncate">{row.axis}</td>
+                    <td className="border border-black text-left px-1 truncate max-w-[100px]">{row.remarks}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* フッター情報 */}
+            <div className="mt-2 text-[10px] text-gray-500 flex justify-between items-center">
+              <span>QuickScan DB System Generated</span>
+              <span>Page 1 / 1</span>
+            </div>
+
           </div>
         </div>
       );
