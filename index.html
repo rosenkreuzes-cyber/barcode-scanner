@@ -11,11 +11,15 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
-    /* A4 縦サイズ印刷用のCSS設定 */
+    /* A4 縦サイズ 1ページ強制印刷用のCSS設定 */
     @media print {
-      body {
+      html, body {
+        height: 100%;
+        overflow: hidden !important;
         background-color: white !important;
         color: black !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
       .no-print {
         display: none !important;
@@ -24,8 +28,11 @@
         width: 100% !important;
         max-width: none !important;
         margin: 0 !important;
-        padding: 8mm !important;
+        padding: 6mm 8mm !important;
         box-shadow: none !important;
+        border: none !important;
+        page-break-after: avoid !important;
+        page-break-inside: avoid !important;
       }
       @page {
         size: A4 portrait;
@@ -33,13 +40,13 @@
       }
     }
 
-    /* E列 180px制限＋テキスト溢れ防止（CSS Container Queries / Fit） */
+    /* E列 180px制限＋テキスト自動フィット */
     .col-e-cell {
       width: 180px !important;
       max-width: 180px !important;
       min-width: 180px !important;
       word-break: break-all;
-      font-size: clamp(8px, 1.2vw, 12px);
+      font-size: clamp(8px, 1.2vw, 11px);
       line-height: 1.1;
       overflow: hidden;
     }
@@ -147,13 +154,12 @@
         setServoPacks(updated);
       };
 
-      // 印刷処理（Sharpdesk Mobile連携・ブラウザ標準印刷）
       const handlePrint = () => {
         window.print();
       };
 
       // ----------------------------------------------------
-      // ① スタート（ヘッダー情報入力）画面（全体的に大きく表示）
+      // ① スタート（ヘッダー情報入力）画面
       // ----------------------------------------------------
       if (currentStep === 0) {
         return (
@@ -416,30 +422,31 @@
       }
 
       // ----------------------------------------------------
-      // ③〜⑥ 入力結果プレビュー画面（A4縦・25行固定・E列180px制限・Sharpdesk印刷対応）
+      // 入力結果プレビュー画面
       // ----------------------------------------------------
-      // No.1〜25 までの全データをマージ構築
       const allRows = [];
       
-      // 1. 固定ユニット
+      // 1. 固定ユニット（軸名称入力があれば優先表示）
       units.forEach(u => {
-        allRows.push({ name: u.label, model: u.model, serial: u.serial, axis: u.axis, remarks: u.remarks });
+        const nameToDisplay = u.axis.trim() !== '' ? u.axis : u.label;
+        allRows.push({ name: nameToDisplay, model: u.model, serial: u.serial, remarks: u.remarks });
       });
 
-      // 2. サーボパック
+      // 2. サーボパック（② ユニット機種名にサーボパックではなく軸名称を入れる）
       servoPacks.forEach(s => {
-        allRows.push({ name: s.label, model: s.model, serial: s.serial, axis: s.axis, remarks: s.remarks });
+        const nameToDisplay = s.axis.trim() !== '' ? s.axis : s.label;
+        allRows.push({ name: nameToDisplay, model: s.model, serial: s.serial, remarks: s.remarks });
       });
 
-      // 3. No.25 まで空行を充填 (④No25まで入力が無くても表示)
+      // No.25 まで空行を充填
       while (allRows.length < 25) {
-        allRows.push({ name: '', model: '', serial: '', axis: '', remarks: '' });
+        allRows.push({ name: '', model: '', serial: '', remarks: '' });
       }
 
       return (
         <div className="min-h-screen bg-gray-100 text-black p-2 sm:p-6 flex flex-col items-center">
           
-          {/* 操作ボタンエリア (画面のみ表示) */}
+          {/* 操作ボタンエリア */}
           <div className="no-print w-full max-w-4xl flex justify-between items-center mb-4 bg-[#042219] p-4 rounded-xl text-[#E6DAA6]">
             <button
               onClick={() => setCurrentStep(totalSteps)}
@@ -458,12 +465,12 @@
             </div>
           </div>
 
-          {/* A4 プレビューエリア (③ A4縦・余白少なめ 8mm) */}
+          {/* A4 プレビューエリア */}
           <div className="print-area bg-white text-black w-full max-w-[210mm] p-[8mm] shadow-2xl rounded-sm border border-gray-300 font-sans">
             
-            {/* プレビューヘッダー */}
+            {/* ① タイトル変更：製品シリアル記入シート */}
             <div className="text-center border-b-2 border-black pb-2 mb-3">
-              <h1 className="text-xl font-bold tracking-widest uppercase">構成機器データシート</h1>
+              <h1 className="text-xl font-bold tracking-widest uppercase">製品シリアル記入シート</h1>
             </div>
 
             {/* 基本情報グリッド */}
@@ -477,37 +484,33 @@
               <div className="col-span-2"><span className="font-bold">エレキ担当者:</span> {headerInfo.elecStaff}</div>
             </div>
 
-            {/* テーブル (No.1 〜 No.25) */}
+            {/* ④ 軸名称列を削除したテーブル */}
             <table className="w-full border-collapse border border-black text-xs">
               <thead>
                 <tr className="bg-gray-200 border-b border-black text-center h-7">
                   <th className="border border-black w-10">No</th>
-                  <th className="border border-black">ユニット / 機器名</th>
+                  <th className="border border-black">ユニット / 機器名（軸名称）</th>
                   <th className="border border-black">製品型式</th>
                   <th className="border border-black col-e-cell">シリアルNo (E列:180px)</th>
-                  <th className="border border-black w-20">軸名称</th>
                   <th className="border border-black">備考</th>
                 </tr>
               </thead>
               <tbody>
                 {allRows.slice(0, 25).map((row, idx) => (
                   <tr key={idx} className="row-h-24 border-b border-black text-center leading-none">
-                    {/* ⑤ 行高さ 24px */}
                     <td className="border border-black font-mono text-[11px]">{idx + 1}</td>
-                    <td className="border border-black text-left px-1 truncate max-w-[120px]">{row.name}</td>
-                    <td className="border border-black text-left px-1 truncate max-w-[120px]">{row.model}</td>
-                    {/* ② E列 180px制限＋文字自動縮小 */}
+                    <td className="border border-black text-left px-2 truncate max-w-[150px]">{row.name}</td>
+                    <td className="border border-black text-left px-2 truncate max-w-[150px]">{row.model}</td>
                     <td className="border border-black col-e-cell px-1 font-mono font-semibold">
                       {row.serial}
                     </td>
-                    <td className="border border-black px-1 truncate">{row.axis}</td>
-                    <td className="border border-black text-left px-1 truncate max-w-[100px]">{row.remarks}</td>
+                    <td className="border border-black text-left px-2 truncate max-w-[120px]">{row.remarks}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            {/* フッター情報 */}
+            {/* フッター */}
             <div className="mt-2 text-[10px] text-gray-500 flex justify-between items-center">
               <span>QuickScan DB System Generated</span>
               <span>Page 1 / 1</span>
