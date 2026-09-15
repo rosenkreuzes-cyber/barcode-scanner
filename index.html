@@ -18,18 +18,17 @@
     const { useState, useEffect } = React;
 
     function App() {
-      // 1. スタート画面の各種入力項目ステート
+      // 1. ヘッダー情報ステート
       const [headerInfo, setHeaderInfo] = useState({
-        docNo: '',       // 製造指図書No (大文字)
-        modelName: '',   // 機種名 (大文字)
-        entryDate: '',   // 記入日 (自動取得)
-        customer: '',    // 客先名 (大文字)
-        unitNo: '',      // 号機No (数値)
-        orderQty: '',    // 発注台数 (数値)
-        elecStaff: ''    // エレキ担当者 (大文字)
+        docNo: '',       // 製造指図書No
+        modelName: '',   // 機種名
+        entryDate: '',   // 記入日
+        customer: '',    // 客先名
+        unitNo: '',      // 号機No
+        orderQty: '',    // 発注台数
+        elecStaff: ''    // エレキ担当者
       });
 
-      // 本日の日付を自動取得 (YYYY/MM/DD)
       useEffect(() => {
         const today = new Date();
         const year = today.getFullYear();
@@ -38,18 +37,15 @@
         setHeaderInfo(prev => ({ ...prev, entryDate: `${year}/${month}/${day}` }));
       }, []);
 
-      // 大文字強制変換ハンドラー
       const handleUppercaseChange = (field, value) => {
         setHeaderInfo(prev => ({ ...prev, [field]: value.toUpperCase() }));
       };
 
-      // 数値制限ハンドラー
       const handleNumberChange = (field, value) => {
-        const numOnly = value.replace(/[^0-9]/g, '');
-        setHeaderInfo(prev => ({ ...prev, [field]: numOnly }));
+        setHeaderInfo(prev => ({ ...prev, [field]: value.replace(/[^0-9]/g, '') }));
       };
 
-      // ユニット・サーボパック状態
+      // 2. ユニット・サーボパック状態
       const [units, setUnits] = useState([
         { id: 'power', label: '電源ユニット', model: 'JPMC-PSD3012N', serial: '', axis: '', remarks: '' },
         { id: 'cpu', label: 'CPU', model: 'JPMC-CP3202N-E', serial: '', axis: '', remarks: '' },
@@ -61,18 +57,12 @@
         { id: 'servo_1', label: 'サーボパック 1', model: '', serial: '', axis: '', remarks: '' }
       ]);
 
+      // Step 0: スタート, 1-4: 固定ユニット, 5+: サーボパック, 99: プレビュー画面
       const [currentStep, setCurrentStep] = useState(0);
 
-      // データクリア機能（記入日は保持）
       const handleClearData = () => {
         setHeaderInfo(prev => ({
-          docNo: '',
-          modelName: '',
-          entryDate: prev.entryDate, // 日付は保持
-          customer: '',
-          unitNo: '',
-          orderQty: '',
-          elecStaff: ''
+          docNo: '', modelName: '', entryDate: prev.entryDate, customer: '', unitNo: '', orderQty: '', elecStaff: ''
         }));
         setUnits(units.map(u => ({ ...u, serial: '', axis: '', remarks: '' })));
         setServoPacks([{ id: 'servo_1', label: 'サーボパック 1', model: '', serial: '', axis: '', remarks: '' }]);
@@ -96,10 +86,7 @@
         const newPack = {
           id: `servo_${Date.now()}`,
           label: `サーボパック ${servoPacks.length + 1}`,
-          model: '',
-          serial: '',
-          axis: '',
-          remarks: ''
+          model: '', serial: '', axis: '', remarks: ''
         };
         setServoPacks([...servoPacks, newPack]);
       };
@@ -111,7 +98,7 @@
       };
 
       // ----------------------------------------------------
-      // 0: スタート（ヘッダー情報入力）画面
+      // Step 0: スタート（基本情報入力）
       // ----------------------------------------------------
       if (currentStep === 0) {
         return (
@@ -122,10 +109,7 @@
                 <p className="text-xs text-[#E6DAA6]/60 mt-1">基本情報の入力</p>
               </div>
 
-              {/* ヘッダー入力フォーム群 */}
               <div className="space-y-3 bg-[#093325]/40 p-4 rounded-xl border border-[#E6DAA6]/20">
-                
-                {/* 1. 製造指図書No (大文字) */}
                 <div>
                   <label className="block text-xs text-[#E6DAA6]/80 mb-1">製造指図書No</label>
                   <input
@@ -137,7 +121,6 @@
                   />
                 </div>
 
-                {/* 2. 機種名 (大文字) */}
                 <div>
                   <label className="block text-xs text-[#E6DAA6]/80 mb-1">機種名</label>
                   <input
@@ -149,7 +132,6 @@
                   />
                 </div>
 
-                {/* 3. 記入日 (自動取得) */}
                 <div>
                   <label className="block text-xs text-[#E6DAA6]/80 mb-1">記入日（自動取得）</label>
                   <input
@@ -160,7 +142,6 @@
                   />
                 </div>
 
-                {/* 4. 客先名 (大文字) */}
                 <div>
                   <label className="block text-xs text-[#E6DAA6]/80 mb-1">客先名</label>
                   <input
@@ -172,7 +153,6 @@
                   />
                 </div>
 
-                {/* 5 & 6. 号機No / 発注台数 (数値入力) */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-xs text-[#E6DAA6]/80 mb-1">号機NO.</label>
@@ -198,7 +178,6 @@
                   </div>
                 </div>
 
-                {/* 7. エレキ担当者 (大文字) */}
                 <div>
                   <label className="block text-xs text-[#E6DAA6]/80 mb-1">エレキ担当者</label>
                   <input
@@ -209,11 +188,9 @@
                     className="w-full bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
                   />
                 </div>
-
               </div>
             </div>
 
-            {/* 下部アクションボタン */}
             <div className="pt-4 space-y-3">
               <button
                 onClick={() => setCurrentStep(1)}
@@ -234,7 +211,7 @@
       }
 
       // ----------------------------------------------------
-      // 1-4: 固定ユニット入力画面
+      // Step 1-4: 固定ユニット入力
       // ----------------------------------------------------
       if (currentStep >= 1 && currentStep <= 4) {
         const uIndex = currentStep - 1;
@@ -304,82 +281,187 @@
       }
 
       // ----------------------------------------------------
-      // 5以降: サーボパック入力画面
+      // Step 5〜: サーボパック入力
       // ----------------------------------------------------
-      const servoIndex = currentStep - 5;
-      const currentPack = servoPacks[servoIndex];
+      if (currentStep >= 5 && currentStep < 5 + servoPacks.length) {
+        const servoIndex = currentStep - 5;
+        const currentPack = servoPacks[servoIndex];
+
+        return (
+          <div className="min-h-screen p-4 flex flex-col justify-between max-w-md mx-auto">
+            <div>
+              <div className="flex justify-between items-center text-sm mb-4">
+                <button onClick={() => setCurrentStep(currentStep - 1)} className="text-[#E6DAA6]/80">← 前へ</button>
+                <span className="text-xs font-mono">{currentStep} / {4 + servoPacks.length}</span>
+              </div>
+
+              <div className="text-center mb-6">
+                <h2 className="text-xl font-bold">{currentPack.label}</h2>
+                <p className="text-xs text-[#E6DAA6]/60">サーボパック情報のスキャン・入力</p>
+              </div>
+
+              <div className="space-y-4">
+                {[
+                  { key: 'model', label: '製品型式' },
+                  { key: 'serial', label: 'シリアルNo' },
+                  { key: 'axis', label: '軸名称' },
+                  { key: 'remarks', label: '備考' }
+                ].map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="block text-xs mb-1">{label}</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={currentPack[key]}
+                        onChange={(e) => handleServoChange(servoIndex, key, e.target.value)}
+                        placeholder="入力またはスキャン"
+                        className="flex-1 bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6]"
+                      />
+                      <button
+                        onClick={() => handleServoChange(servoIndex, key, `SN-${Math.floor(100000 + Math.random() * 900000)}`)}
+                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-lg px-3 py-2"
+                      >
+                        📷
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 flex gap-2">
+                <button
+                  onClick={handleAddServo}
+                  className="flex-1 border border-dashed border-[#E6DAA6]/60 text-[#E6DAA6] rounded-lg py-2.5 text-sm"
+                >
+                  ＋ サーボパックを追加
+                </button>
+                {servoPacks.length > 1 && (
+                  <button
+                    onClick={() => handleRemoveServo(servoIndex)}
+                    className="border border-red-500/40 text-red-400 rounded-lg px-3 py-2.5 text-sm"
+                  >
+                    削除
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-6">
+              <button
+                onClick={() => {
+                  if (servoIndex < servoPacks.length - 1) {
+                    setCurrentStep(currentStep + 1);
+                  } else {
+                    setCurrentStep(99); // プレビュー画面へ移動！
+                  }
+                }}
+                className="w-full bg-[#F5D887] text-[#042219] font-bold py-3.5 rounded-full text-base active:scale-95 transition-all"
+              >
+                {servoIndex < servoPacks.length - 1 ? '次のサーボパックへ' : 'プレビューへ'}
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      // ----------------------------------------------------
+      // Step 99: 入力結果プレビュー画面（Excelセル表現）
+      // ----------------------------------------------------
+      const allRows = [...units, ...servoPacks];
 
       return (
-        <div className="min-h-screen p-4 flex flex-col justify-between max-w-md mx-auto">
+        <div className="min-h-screen p-3 flex flex-col justify-between max-w-md mx-auto text-[#042219]">
           <div>
-            <div className="flex justify-between items-center text-sm mb-4">
-              <button onClick={() => setCurrentStep(currentStep - 1)} className="text-[#E6DAA6]/80">← 前へ</button>
-              <span className="text-xs font-mono">{currentStep} / {4 + servoPacks.length}</span>
-            </div>
-
-            <div className="text-center mb-6">
-              <h2 className="text-xl font-bold">{currentPack.label}</h2>
-              <p className="text-xs text-[#E6DAA6]/60">サーボパック情報のスキャン・入力</p>
-            </div>
-
-            <div className="space-y-4">
-              {[
-                { key: 'model', label: '製品型式' },
-                { key: 'serial', label: 'シリアルNo' },
-                { key: 'axis', label: '軸名称' },
-                { key: 'remarks', label: '備考' }
-              ].map(({ key, label }) => (
-                <div key={key}>
-                  <label className="block text-xs mb-1">{label}</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={currentPack[key]}
-                      onChange={(e) => handleServoChange(servoIndex, key, e.target.value)}
-                      placeholder="入力またはスキャン"
-                      className="flex-1 bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6]"
-                    />
-                    <button
-                      onClick={() => handleServoChange(servoIndex, key, `SN-${Math.floor(100000 + Math.random() * 900000)}`)}
-                      className="bg-[#093325] border border-[#E6DAA6]/40 rounded-lg px-3 py-2"
-                    >
-                      📷
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-6 flex gap-2">
-              <button
-                onClick={handleAddServo}
-                className="flex-1 border border-dashed border-[#E6DAA6]/60 text-[#E6DAA6] rounded-lg py-2.5 text-sm"
-              >
-                ＋ サーボパックを追加
+            <div className="flex items-center mb-3">
+              <button onClick={() => setCurrentStep(4 + servoPacks.length)} className="text-[#E6DAA6] text-sm">
+                ← 戻る
               </button>
-              {servoPacks.length > 1 && (
-                <button
-                  onClick={() => handleRemoveServo(servoIndex)}
-                  className="border border-red-500/40 text-red-400 rounded-lg px-3 py-2.5 text-sm"
-                >
-                  削除
-                </button>
-              )}
+            </div>
+
+            <div className="text-center mb-3 text-[#E6DAA6]">
+              <h2 className="text-xl font-bold">入力結果プレビュー</h2>
+              <p className="text-[10px] text-[#E6DAA6]/70">Excelのセル配置を確認してください (黄色=入力セル)</p>
+            </div>
+
+            {/* Excelスプレッドシートデザイン */}
+            <div className="bg-white rounded border border-gray-400 overflow-x-auto text-[11px]">
+              <table className="w-full border-collapse text-center">
+                <thead>
+                  <tr className="bg-gray-100 border-b border-gray-300 font-mono text-[10px] text-gray-500">
+                    <th className="border-r border-gray-300 w-6 py-0.5"></th>
+                    <th className="border-r border-gray-300 w-12">B</th>
+                    <th className="border-r border-gray-300 w-24">C</th>
+                    <th className="border-r border-gray-300 w-16">E</th>
+                    <th className="border-r border-gray-300 w-16">G</th>
+                    <th className="w-12">H</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-300">
+                  <tr className="bg-gray-50 font-bold border-b border-gray-400">
+                    <td className="bg-gray-100 border-r border-gray-300 text-gray-500 font-mono text-[9px]">1</td>
+                    <td colSpan="5" className="text-left px-2 py-1 text-xs">製品シリアル記入シート</td>
+                  </tr>
+
+                  <tr>
+                    <td className="bg-gray-100 border-r border-gray-300 text-gray-500 font-mono text-[9px]">3</td>
+                    <td className="border-r border-gray-300 bg-gray-50 px-1 py-1 text-[10px] font-medium">製造指図書No</td>
+                    <td className="border-r border-gray-300 bg-[#FEF9C3] px-1 font-mono text-left">{headerInfo.docNo}</td>
+                    <td className="border-r border-gray-300 bg-gray-50 px-1 text-[10px] font-medium">客先名</td>
+                    <td colSpan="2" className="bg-[#FEF9C3] px-1 font-mono text-left">{headerInfo.customer}</td>
+                  </tr>
+
+                  <tr>
+                    <td className="bg-gray-100 border-r border-gray-300 text-gray-500 font-mono text-[9px]">4</td>
+                    <td className="border-r border-gray-300 bg-gray-50 px-1 py-1 text-[10px] font-medium">機種名</td>
+                    <td className="border-r border-gray-300 bg-[#FEF9C3] px-1 font-mono text-left">{headerInfo.modelName}</td>
+                    <td className="border-r border-gray-300 bg-gray-50 px-1 text-[9px] font-medium leading-tight">号機NO./発注台数</td>
+                    <td className="border-r border-gray-300 bg-[#FEF9C3] px-1 font-mono">{headerInfo.unitNo}</td>
+                    <td className="bg-[#FEF9C3] px-1 font-mono">{headerInfo.orderQty}</td>
+                  </tr>
+
+                  <tr className="border-b-2 border-gray-400">
+                    <td className="bg-gray-100 border-r border-gray-300 text-gray-500 font-mono text-[9px]">5</td>
+                    <td className="border-r border-gray-300 bg-gray-50 px-1 py-1 text-[10px] font-medium">記入日</td>
+                    <td className="border-r border-gray-300 px-1 font-mono text-left">{headerInfo.entryDate}</td>
+                    <td className="border-r border-gray-300 bg-gray-50 px-1 text-[9px] font-medium leading-tight">エレキ担当者</td>
+                    <td colSpan="2" className="bg-[#FEF9C3] px-1 font-mono text-left">{headerInfo.elecStaff}</td>
+                  </tr>
+
+                  {/* 表ヘッダー */}
+                  <tr className="bg-gray-100 font-medium text-[10px] border-b border-gray-400">
+                    <td className="border-r border-gray-300 text-gray-500 font-mono text-[9px]">7</td>
+                    <td className="border-r border-gray-300 px-0.5 py-1">NO.</td>
+                    <td className="border-r border-gray-300 px-1">製品型式</td>
+                    <td className="border-r border-gray-300 px-1">シリアルNO.</td>
+                    <td className="border-r border-gray-300 px-1">軸名称</td>
+                    <td className="px-1">備考</td>
+                  </tr>
+
+                  {/* データ行 */}
+                  {allRows.map((item, idx) => (
+                    <tr key={item.id || idx} className="text-[10px]">
+                      <td className="bg-gray-100 border-r border-gray-300 text-gray-500 font-mono text-[9px] py-1.5">{8 + idx}</td>
+                      <td className="border-r border-gray-300 bg-[#FEF9C3] font-mono">{idx + 1}</td>
+                      <td className="border-r border-gray-300 bg-[#FEF9C3] px-1 font-mono text-left break-all text-[9px] leading-tight">{item.model}</td>
+                      <td className="border-r border-gray-300 bg-[#FEF9C3] px-1 font-mono text-left break-all text-[9px]">{item.serial}</td>
+                      <td className="border-r border-gray-300 bg-[#FEF9C3] px-1 font-mono text-left">{item.axis}</td>
+                      <td className="bg-[#FEF9C3] px-1 font-mono text-left">{item.remarks}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <div className="pt-6">
+          <div className="pt-4">
             <button
               onClick={() => {
-                if (servoIndex < servoPacks.length - 1) {
-                  setCurrentStep(currentStep + 1);
-                } else {
-                  alert('入力完了！プレビュー画面へ遷移します。');
-                }
+                alert('保存処理が完了しました');
+                setCurrentStep(0);
               }}
-              className="w-full bg-[#F5D887] text-[#042219] font-bold py-3.5 rounded-full text-base active:scale-95 transition-all"
+              className="w-full bg-[#F5D887] text-[#042219] font-bold py-3.5 rounded-full text-base active:scale-95 transition-all shadow-lg"
             >
-              {servoIndex < servoPacks.length - 1 ? '次のサーボパックへ' : 'プレビューへ'}
+              確定・データ保存
             </button>
           </div>
         </div>
