@@ -15,22 +15,65 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState } = React;
+    const { useState, useEffect } = React;
 
     function App() {
-      const [entryDate] = useState('2026/09/15');
+      // 1. スタート画面の各種入力項目ステート
+      const [headerInfo, setHeaderInfo] = useState({
+        docNo: '',       // 製造指図書No (大文字)
+        modelName: '',   // 機種名 (大文字)
+        entryDate: '',   // 記入日 (自動取得)
+        customer: '',    // 客先名 (大文字)
+        unitNo: '',      // 号機No (数値)
+        orderQty: '',    // 発注台数 (数値)
+        elecStaff: ''    // エレキ担当者 (大文字)
+      });
+
+      // 本日の日付を自動取得 (YYYY/MM/DD)
+      useEffect(() => {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        setHeaderInfo(prev => ({ ...prev, entryDate: `${year}/${month}/${day}` }));
+      }, []);
+
+      // 大文字強制変換ハンドラー
+      const handleUppercaseChange = (field, value) => {
+        setHeaderInfo(prev => ({ ...prev, [field]: value.toUpperCase() }));
+      };
+
+      // 数値制限ハンドラー
+      const handleNumberChange = (field, value) => {
+        const numOnly = value.replace(/[^0-9]/g, '');
+        setHeaderInfo(prev => ({ ...prev, [field]: numOnly }));
+      };
+
+      // ユニット・サーボパック状態
       const [units, setUnits] = useState([
         { id: 'power', label: '電源ユニット', model: 'JPMC-PSD3012N', serial: '', axis: '', remarks: '' },
         { id: 'cpu', label: 'CPU', model: 'JPMC-CP3202N-E', serial: '', axis: '', remarks: '' },
         { id: 'base', label: 'ベースユニット', model: 'JPMC-BUB3008N-E', serial: '', axis: '', remarks: '' },
         { id: 'lio', label: 'LIO-04', model: 'JPMC-IO2303-E', serial: '', axis: '', remarks: '' }
       ]);
+
       const [servoPacks, setServoPacks] = useState([
         { id: 'servo_1', label: 'サーボパック 1', model: '', serial: '', axis: '', remarks: '' }
       ]);
+
       const [currentStep, setCurrentStep] = useState(0);
 
+      // データクリア機能（記入日は保持）
       const handleClearData = () => {
+        setHeaderInfo(prev => ({
+          docNo: '',
+          modelName: '',
+          entryDate: prev.entryDate, // 日付は保持
+          customer: '',
+          unitNo: '',
+          orderQty: '',
+          elecStaff: ''
+        }));
         setUnits(units.map(u => ({ ...u, serial: '', axis: '', remarks: '' })));
         setServoPacks([{ id: 'servo_1', label: 'サーボパック 1', model: '', serial: '', axis: '', remarks: '' }]);
         setCurrentStep(0);
@@ -67,28 +110,121 @@
         setServoPacks(updated);
       };
 
-      // 0: スタート画面
+      // ----------------------------------------------------
+      // 0: スタート（ヘッダー情報入力）画面
+      // ----------------------------------------------------
       if (currentStep === 0) {
         return (
-          <div className="min-h-screen p-6 flex flex-col justify-between max-w-md mx-auto">
-            <div className="text-center pt-8">
-              <h1 className="text-2xl font-bold tracking-wider mb-2">QuickScan DB</h1>
-              <p className="text-xs text-[#E6DAA6]/60">記入日: {entryDate}</p>
+          <div className="min-h-screen p-4 flex flex-col justify-between max-w-md mx-auto">
+            <div>
+              <div className="text-center my-4">
+                <h1 className="text-2xl font-bold tracking-wider text-[#F5D887]">QuickScan DB</h1>
+                <p className="text-xs text-[#E6DAA6]/60 mt-1">基本情報の入力</p>
+              </div>
+
+              {/* ヘッダー入力フォーム群 */}
+              <div className="space-y-3 bg-[#093325]/40 p-4 rounded-xl border border-[#E6DAA6]/20">
+                
+                {/* 1. 製造指図書No (大文字) */}
+                <div>
+                  <label className="block text-xs text-[#E6DAA6]/80 mb-1">製造指図書No</label>
+                  <input
+                    type="text"
+                    value={headerInfo.docNo}
+                    onChange={(e) => handleUppercaseChange('docNo', e.target.value)}
+                    placeholder="例: ORD-2026-X"
+                    className="w-full bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
+                  />
+                </div>
+
+                {/* 2. 機種名 (大文字) */}
+                <div>
+                  <label className="block text-xs text-[#E6DAA6]/80 mb-1">機種名</label>
+                  <input
+                    type="text"
+                    value={headerInfo.modelName}
+                    onChange={(e) => handleUppercaseChange('modelName', e.target.value)}
+                    placeholder="例: MODEL-A100"
+                    className="w-full bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
+                  />
+                </div>
+
+                {/* 3. 記入日 (自動取得) */}
+                <div>
+                  <label className="block text-xs text-[#E6DAA6]/80 mb-1">記入日（自動取得）</label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={headerInfo.entryDate}
+                    className="w-full bg-[#093325]/50 border border-[#E6DAA6]/20 rounded-lg px-3 py-2 text-sm text-[#E6DAA6]/70 cursor-not-allowed"
+                  />
+                </div>
+
+                {/* 4. 客先名 (大文字) */}
+                <div>
+                  <label className="block text-xs text-[#E6DAA6]/80 mb-1">客先名</label>
+                  <input
+                    type="text"
+                    value={headerInfo.customer}
+                    onChange={(e) => handleUppercaseChange('customer', e.target.value)}
+                    placeholder="例: TANAKA CORP"
+                    className="w-full bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
+                  />
+                </div>
+
+                {/* 5 & 6. 号機No / 発注台数 (数値入力) */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-[#E6DAA6]/80 mb-1">号機NO.</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={headerInfo.unitNo}
+                      onChange={(e) => handleNumberChange('unitNo', e.target.value)}
+                      placeholder="数字のみ"
+                      className="w-full bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6] focus:outline-none focus:border-[#F5D887]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[#E6DAA6]/80 mb-1">発注台数</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={headerInfo.orderQty}
+                      onChange={(e) => handleNumberChange('orderQty', e.target.value)}
+                      placeholder="数字のみ"
+                      className="w-full bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6] focus:outline-none focus:border-[#F5D887]"
+                    />
+                  </div>
+                </div>
+
+                {/* 7. エレキ担当者 (大文字) */}
+                <div>
+                  <label className="block text-xs text-[#E6DAA6]/80 mb-1">エレキ担当者</label>
+                  <input
+                    type="text"
+                    value={headerInfo.elecStaff}
+                    onChange={(e) => handleUppercaseChange('elecStaff', e.target.value)}
+                    placeholder="例: YAMADA"
+                    className="w-full bg-[#093325] border border-[#E6DAA6]/30 rounded-lg px-3 py-2 text-sm text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
+                  />
+                </div>
+
+              </div>
             </div>
 
-            <div className="space-y-4">
+            {/* 下部アクションボタン */}
+            <div className="pt-4 space-y-3">
               <button
                 onClick={() => setCurrentStep(1)}
-                className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-xl text-lg shadow-lg active:scale-95 transition-all"
+                className="w-full bg-[#F5D887] text-[#042219] font-bold py-3.5 rounded-full text-base active:scale-95 transition-all shadow-lg"
               >
-                スキャン・入力を開始
+                次へ（ユニット入力）
               </button>
-            </div>
 
-            <div className="pb-8">
               <button
                 onClick={handleClearData}
-                className="w-full border border-red-500/50 text-red-400 py-3 rounded-lg text-sm hover:bg-red-950/20 active:scale-95 transition-all"
+                className="w-full border border-red-500/50 text-red-400 py-2.5 rounded-lg text-sm hover:bg-red-950/20 active:scale-95 transition-all"
               >
                 入力情報をクリア
               </button>
@@ -97,7 +233,9 @@
         );
       }
 
-      // 1-4: 固定ユニット画面
+      // ----------------------------------------------------
+      // 1-4: 固定ユニット入力画面
+      // ----------------------------------------------------
       if (currentStep >= 1 && currentStep <= 4) {
         const uIndex = currentStep - 1;
         const unit = units[uIndex];
@@ -126,9 +264,13 @@
                   />
                 </div>
 
-                {['serial', 'axis', 'remarks'].map((key) => (
+                {[
+                  { key: 'serial', label: 'シリアルNo' },
+                  { key: 'axis', label: '軸名称' },
+                  { key: 'remarks', label: '備考' }
+                ].map(({ key, label }) => (
                   <div key={key}>
-                    <label className="block text-xs mb-1">{key === 'serial' ? 'シリアルNo' : key === 'axis' ? '軸名称' : '備考'}</label>
+                    <label className="block text-xs mb-1">{label}</label>
                     <div className="flex gap-2">
                       <input
                         type="text"
@@ -161,7 +303,9 @@
         );
       }
 
-      // 5以降: サーボパック画面
+      // ----------------------------------------------------
+      // 5以降: サーボパック入力画面
+      // ----------------------------------------------------
       const servoIndex = currentStep - 5;
       const currentPack = servoPacks[servoIndex];
 
