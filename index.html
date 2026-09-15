@@ -109,7 +109,6 @@
         { id: 'lio', label: 'LIO-04', model: 'JPMC-IO2303-E', serial: '', axis: '', remarks: '' }
       ]);
 
-      // ④ 「サーボパック」文字をデフォルト表記から削除（軸名称入力に依存）
       const [servoPacks, setServoPacks] = useState([
         { id: 'servo_1', label: '', model: '', serial: '', axis: '', remarks: '' }
       ]);
@@ -141,7 +140,6 @@
       const handleServoChange = (index, field, value) => {
         const updated = [...servoPacks];
         updated[index][field] = value;
-        updated[index][field] = value;
         setServoPacks(updated);
       };
 
@@ -163,7 +161,7 @@
         setServoPacks(updated);
       };
 
-      // ② カメラ起動スキャン処理
+      // カメラ起動スキャン処理
       const startScanner = (type, index, field) => {
         setScanTarget({ type, index, field });
         setIsScanning(true);
@@ -177,7 +175,6 @@
               { facingMode: "environment" },
               { fps: 10, qrbox: { width: 250, height: 150 } },
               (decodedText) => {
-                // スキャン成功時
                 if (type === 'unit') {
                   handleUnitChange(index, field, decodedText);
                 } else {
@@ -185,9 +182,7 @@
                 }
                 stopScanner();
               },
-              (errorMessage) => {
-                // スキャン中の試行エラー（無視して継続）
-              }
+              (errorMessage) => {}
             ).catch(err => {
               console.error("Camera error:", err);
               alert("カメラの起動に失敗しました。ダミー用シリアルを入力します。");
@@ -400,7 +395,7 @@
               </button>
             </div>
 
-            {/* ② カメラモーダル表示 */}
+            {/* カメラモーダル表示 */}
             {isScanning && (
               <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center p-4 z-50">
                 <div className="text-white mb-4 text-center">バーコード / QRコードを枠内にあわせてください</div>
@@ -496,7 +491,7 @@
               </button>
             </div>
 
-            {/* ② カメラモーダル表示 */}
+            {/* カメラモーダル表示 */}
             {isScanning && (
               <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center p-4 z-50">
                 <div className="text-white mb-4 text-center">バーコード / QRコードを枠内にあわせてください</div>
@@ -518,20 +513,20 @@
       // ----------------------------------------------------
       const allRows = [];
       
-      // 1. 固定ユニットデータ
+      // 1. 固定ユニットデータ（軸名称が入力されていなければ固定ユニット名を軸名称欄のデフォルトとして反映）
       units.forEach(u => {
-        allRows.push({ name: u.label, model: u.model, serial: u.serial, axis: u.axis, remarks: u.remarks });
+        const displayAxis = u.axis.trim() !== '' ? u.axis : u.label;
+        allRows.push({ model: u.model, serial: u.serial, axis: displayAxis, remarks: u.remarks });
       });
 
-      // 2. 追加機器データ（④「サーボパック」文字を削除し入力された軸名称を優先）
+      // 2. 追加機器データ
       servoPacks.forEach(s => {
-        const displayName = s.axis.trim() !== '' ? s.axis : (s.label || '');
-        allRows.push({ name: displayName, model: s.model, serial: s.serial, axis: s.axis, remarks: s.remarks });
+        allRows.push({ model: s.model, serial: s.serial, axis: s.axis, remarks: s.remarks });
       });
 
       // No.25 まで空行で埋める
       while (allRows.length < 25) {
-        allRows.push({ name: '', model: '', serial: '', axis: '', remarks: '' });
+        allRows.push({ model: '', serial: '', axis: '', remarks: '' });
       }
 
       return (
@@ -564,35 +559,30 @@
               <h1 className="text-xl font-bold tracking-widest uppercase">製品シリアル記入シート</h1>
             </div>
 
-            {/* ③ 基本情報エリア：日付欄含む全項目を確実に1行で固定表示 */}
+            {/* 基本情報エリア */}
             <div className="grid grid-cols-2 text-xs border border-black mb-3">
-              
-              {/* 左側：製造指図書No / 機種名 / 記入日 (全て1行) */}
               <div className="border-r border-black divide-y divide-black">
                 <div className="h-6 px-2 flex items-center"><span className="font-bold w-28 shrink-0">製造指図書No:</span><span className="truncate">{headerInfo.docNo}</span></div>
                 <div className="h-6 px-2 flex items-center"><span className="font-bold w-28 shrink-0">機種名:</span><span className="truncate">{headerInfo.modelName}</span></div>
                 <div className="h-6 px-2 flex items-center"><span className="font-bold w-28 shrink-0">記入日:</span><span className="truncate">{headerInfo.entryDate}</span></div>
               </div>
 
-              {/* 右側：客先名 / 号機No / 発注台数 / エレキ担当者 */}
               <div className="divide-y divide-black">
                 <div className="h-[4.5] px-2 flex items-center"><span className="font-bold w-24 shrink-0">客先名:</span><span className="truncate">{headerInfo.customer}</span></div>
                 <div className="h-[4.5] px-2 flex items-center"><span className="font-bold w-24 shrink-0">号機No:</span><span className="truncate">{headerInfo.unitNo}</span></div>
                 <div className="h-[4.5] px-2 flex items-center"><span className="font-bold w-24 shrink-0">発注台数:</span><span className="truncate">{headerInfo.orderQty}</span></div>
                 <div className="h-[4.5] px-2 flex items-center"><span className="font-bold w-24 shrink-0">エレキ担当者:</span><span className="truncate">{headerInfo.elecStaff}</span></div>
               </div>
-
             </div>
 
-            {/* ① 「名称」列に変更・軸名称を右脇へ配置したテーブル */}
+            {/* 「名称」列を削除し「軸名称」に一本化したテーブル */}
             <table className="w-full border-collapse border border-black text-[11px]">
               <thead>
                 <tr className="bg-gray-200 border-b border-black text-center h-7 font-bold">
                   <th className="border border-black w-8">No</th>
-                  <th className="border border-black">名称</th>
                   <th className="border border-black">製品型式</th>
                   <th className="border border-black col-e-cell">シリアルNo</th>
-                  <th className="border border-black w-24">軸名称</th>
+                  <th className="border border-black w-36">軸名称</th>
                   <th className="border border-black">備考</th>
                 </tr>
               </thead>
@@ -600,14 +590,12 @@
                 {allRows.slice(0, 25).map((row, idx) => (
                   <tr key={idx} className="row-h-24 border-b border-black text-center leading-none">
                     <td className="border border-black font-mono">{idx + 1}</td>
-                    {/* ① 「名称」列 */}
-                    <td className="border border-black text-left px-2 truncate max-w-[120px]">{row.name}</td>
-                    <td className="border border-black text-left px-2 truncate max-w-[120px]">{row.model}</td>
+                    <td className="border border-black text-left px-2 truncate max-w-[140px]">{row.model}</td>
                     <td className="border border-black col-e-cell px-1 font-mono font-semibold">
                       {row.serial}
                     </td>
                     <td className="border border-black text-left px-2 truncate">{row.axis}</td>
-                    <td className="border border-black text-left px-2 truncate max-w-[100px]">{row.remarks}</td>
+                    <td className="border border-black text-left px-2 truncate max-w-[120px]">{row.remarks}</td>
                   </tr>
                 ))}
               </tbody>
