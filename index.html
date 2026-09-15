@@ -10,6 +10,8 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- バーコード/QRスキャン用ライブラリ -->
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <style>
     /* A4 縦サイズ 1ページ印刷用CSS */
     @media print {
@@ -62,7 +64,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     function App() {
       // 1. ヘッダー基本情報
@@ -75,6 +77,11 @@
         orderQty: '',    // 発注台数 (数値)
         elecStaff: ''    // エレキ担当者 (大文字)
       });
+
+      // スキャナー用ステート
+      const [isScanning, setIsScanning] = useState(false);
+      const [scanTarget, setScanTarget] = useState(null); // { type: 'unit'|'servo', index, field }
+      const html5QrcodeScannerRef = useRef(null);
 
       // 本日の日付を自動取得
       useEffect(() => {
@@ -102,8 +109,9 @@
         { id: 'lio', label: 'LIO-04', model: 'JPMC-IO2303-E', serial: '', axis: '', remarks: '' }
       ]);
 
+      // ④ 「サーボパック」文字をデフォルト表記から削除（軸名称入力に依存）
       const [servoPacks, setServoPacks] = useState([
-        { id: 'servo_1', label: 'サーボパック 1', model: '', serial: '', axis: '', remarks: '' }
+        { id: 'servo_1', label: '', model: '', serial: '', axis: '', remarks: '' }
       ]);
 
       const [currentStep, setCurrentStep] = useState(0);
@@ -119,7 +127,7 @@
           elecStaff: ''
         }));
         setUnits(units.map(u => ({ ...u, serial: '', axis: '', remarks: '' })));
-        setServoPacks([{ id: 'servo_1', label: 'サーボパック 1', model: '', serial: '', axis: '', remarks: '' }]);
+        setServoPacks([{ id: 'servo_1', label: '', model: '', serial: '', axis: '', remarks: '' }]);
         setCurrentStep(0);
         alert('入力データをクリアしました（記入日は保持されます）。');
       };
@@ -133,13 +141,14 @@
       const handleServoChange = (index, field, value) => {
         const updated = [...servoPacks];
         updated[index][field] = value;
+        updated[index][field] = value;
         setServoPacks(updated);
       };
 
       const handleAddServo = () => {
         const newPack = {
           id: `servo_${Date.now()}`,
-          label: `サーボパック ${servoPacks.length + 1}`,
+          label: '',
           model: '',
           serial: '',
           axis: '',
@@ -152,6 +161,59 @@
         if (servoPacks.length <= 1) return;
         const updated = servoPacks.filter((_, i) => i !== index);
         setServoPacks(updated);
+      };
+
+      // ② カメラ起動スキャン処理
+      const startScanner = (type, index, field) => {
+        setScanTarget({ type, index, field });
+        setIsScanning(true);
+
+        setTimeout(() => {
+          if (window.Html5Qrcode) {
+            const html5QrCode = new Html5Qrcode("reader");
+            html5QrcodeScannerRef.current = html5QrCode;
+
+            html5QrCode.start(
+              { facingMode: "environment" },
+              { fps: 10, qrbox: { width: 250, height: 150 } },
+              (decodedText) => {
+                // スキャン成功時
+                if (type === 'unit') {
+                  handleUnitChange(index, field, decodedText);
+                } else {
+                  handleServoChange(index, field, decodedText);
+                }
+                stopScanner();
+              },
+              (errorMessage) => {
+                // スキャン中の試行エラー（無視して継続）
+              }
+            ).catch(err => {
+              console.error("Camera error:", err);
+              alert("カメラの起動に失敗しました。ダミー用シリアルを入力します。");
+              const dummy = `SN-${Math.floor(100000 + Math.random() * 900000)}`;
+              if (type === 'unit') handleUnitChange(index, field, dummy);
+              else handleServoChange(index, field, dummy);
+              stopScanner();
+            });
+          }
+        }, 300);
+      };
+
+      const stopScanner = () => {
+        if (html5QrcodeScannerRef.current) {
+          html5QrcodeScannerRef.current.stop().then(() => {
+            html5QrcodeScannerRef.current.clear();
+            setIsScanning(false);
+            setScanTarget(null);
+          }).catch(() => {
+            setIsScanning(false);
+            setScanTarget(null);
+          });
+        } else {
+          setIsScanning(false);
+          setScanTarget(null);
+        }
       };
 
       const handlePrint = () => {
@@ -318,8 +380,8 @@
                         className="flex-1 bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6]"
                       />
                       <button
-                        onClick={() => handleUnitChange(uIndex, key, `SN-${Math.floor(100000 + Math.random() * 900000)}`)}
-                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-lg"
+                        onClick={() => startScanner('unit', uIndex, key)}
+                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-lg hover:bg-[#093325]/80 active:scale-95"
                       >
                         📷
                       </button>
@@ -337,12 +399,26 @@
                 次へ
               </button>
             </div>
+
+            {/* ② カメラモーダル表示 */}
+            {isScanning && (
+              <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center p-4 z-50">
+                <div className="text-white mb-4 text-center">バーコード / QRコードを枠内にあわせてください</div>
+                <div id="reader" className="w-full max-w-sm bg-white rounded-xl overflow-hidden"></div>
+                <button
+                  onClick={stopScanner}
+                  className="mt-6 px-6 py-3 bg-red-600 text-white font-bold rounded-full"
+                >
+                  キャンセル
+                </button>
+              </div>
+            )}
           </div>
         );
       }
 
       // ----------------------------------------------------
-      // サーボパック入力画面 (Step 5 〜)
+      // サーボパック等入力画面 (Step 5 〜)
       // ----------------------------------------------------
       const servoIndex = currentStep - 5;
       const totalSteps = 4 + servoPacks.length;
@@ -359,8 +435,10 @@
               </div>
 
               <div className="text-center mb-6">
-                <h2 className="text-2xl font-bold text-[#F5D887]">{currentPack.label}</h2>
-                <p className="text-sm text-[#E6DAA6]/70 mt-1">サーボパック情報のスキャン・入力</p>
+                <h2 className="text-2xl font-bold text-[#F5D887]">
+                  {currentPack.axis ? `${currentPack.axis}` : `追加機器 ${servoIndex + 1}`}
+                </h2>
+                <p className="text-sm text-[#E6DAA6]/70 mt-1">スキャン・入力を行ってください</p>
               </div>
 
               <div className="space-y-4">
@@ -381,8 +459,8 @@
                         className="flex-1 bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6]"
                       />
                       <button
-                        onClick={() => handleServoChange(servoIndex, key, `SN-${Math.floor(100000 + Math.random() * 900000)}`)}
-                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-lg"
+                        onClick={() => startScanner('servo', servoIndex, key)}
+                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-lg hover:bg-[#093325]/80 active:scale-95"
                       >
                         📷
                       </button>
@@ -396,7 +474,7 @@
                   onClick={handleAddServo}
                   className="flex-1 border border-dashed border-[#E6DAA6]/70 text-[#E6DAA6] rounded-xl py-3 text-base font-medium"
                 >
-                  ＋ サーボパックを追加
+                  ＋ 機器を追加
                 </button>
                 {servoPacks.length > 1 && (
                   <button
@@ -414,9 +492,23 @@
                 onClick={() => setCurrentStep(currentStep + 1)}
                 className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg active:scale-95 transition-all"
               >
-                {servoIndex < servoPacks.length - 1 ? '次のサーボパックへ' : 'プレビュー（印刷）へ'}
+                {servoIndex < servoPacks.length - 1 ? '次の機器へ' : 'プレビュー（印刷）へ'}
               </button>
             </div>
+
+            {/* ② カメラモーダル表示 */}
+            {isScanning && (
+              <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center p-4 z-50">
+                <div className="text-white mb-4 text-center">バーコード / QRコードを枠内にあわせてください</div>
+                <div id="reader" className="w-full max-w-sm bg-white rounded-xl overflow-hidden"></div>
+                <button
+                  onClick={stopScanner}
+                  className="mt-6 px-6 py-3 bg-red-600 text-white font-bold rounded-full"
+                >
+                  キャンセル
+                </button>
+              </div>
+            )}
           </div>
         );
       }
@@ -426,14 +518,15 @@
       // ----------------------------------------------------
       const allRows = [];
       
-      // 固定ユニットデータ
+      // 1. 固定ユニットデータ
       units.forEach(u => {
         allRows.push({ name: u.label, model: u.model, serial: u.serial, axis: u.axis, remarks: u.remarks });
       });
 
-      // サーボパックデータ
+      // 2. 追加機器データ（④「サーボパック」文字を削除し入力された軸名称を優先）
       servoPacks.forEach(s => {
-        allRows.push({ name: s.label, model: s.model, serial: s.serial, axis: s.axis, remarks: s.remarks });
+        const displayName = s.axis.trim() !== '' ? s.axis : (s.label || '');
+        allRows.push({ name: displayName, model: s.model, serial: s.serial, axis: s.axis, remarks: s.remarks });
       });
 
       // No.25 まで空行で埋める
@@ -471,32 +564,32 @@
               <h1 className="text-xl font-bold tracking-widest uppercase">製品シリアル記入シート</h1>
             </div>
 
-            {/* 基本情報エリア：④⑤⑥ 縦2列・格子状罫線で整形 */}
+            {/* ③ 基本情報エリア：日付欄含む全項目を確実に1行で固定表示 */}
             <div className="grid grid-cols-2 text-xs border border-black mb-3">
               
-              {/* 左側：縦3行 (製造指図書No / 機種名 / 記入日) */}
+              {/* 左側：製造指図書No / 機種名 / 記入日 (全て1行) */}
               <div className="border-r border-black divide-y divide-black">
-                <div className="p-1.5 flex"><span className="font-bold w-28 shrink-0">製造指図書No:</span><span className="truncate">{headerInfo.docNo}</span></div>
-                <div className="p-1.5 flex"><span className="font-bold w-28 shrink-0">機種名:</span><span className="truncate">{headerInfo.modelName}</span></div>
-                <div className="p-1.5 flex"><span className="font-bold w-28 shrink-0">記入日:</span><span className="truncate">{headerInfo.entryDate}</span></div>
+                <div className="h-6 px-2 flex items-center"><span className="font-bold w-28 shrink-0">製造指図書No:</span><span className="truncate">{headerInfo.docNo}</span></div>
+                <div className="h-6 px-2 flex items-center"><span className="font-bold w-28 shrink-0">機種名:</span><span className="truncate">{headerInfo.modelName}</span></div>
+                <div className="h-6 px-2 flex items-center"><span className="font-bold w-28 shrink-0">記入日:</span><span className="truncate">{headerInfo.entryDate}</span></div>
               </div>
 
-              {/* 右側：縦4行 (客先名 / 号機No / 発注台数 / エレキ担当者) */}
+              {/* 右側：客先名 / 号機No / 発注台数 / エレキ担当者 */}
               <div className="divide-y divide-black">
-                <div className="p-1 flex"><span className="font-bold w-24 shrink-0">客先名:</span><span className="truncate">{headerInfo.customer}</span></div>
-                <div className="p-1 flex"><span className="font-bold w-24 shrink-0">号機No:</span><span className="truncate">{headerInfo.unitNo}</span></div>
-                <div className="p-1 flex"><span className="font-bold w-24 shrink-0">発注台数:</span><span className="truncate">{headerInfo.orderQty}</span></div>
-                <div className="p-1 flex"><span className="font-bold w-24 shrink-0">エレキ担当者:</span><span className="truncate">{headerInfo.elecStaff}</span></div>
+                <div className="h-[4.5] px-2 flex items-center"><span className="font-bold w-24 shrink-0">客先名:</span><span className="truncate">{headerInfo.customer}</span></div>
+                <div className="h-[4.5] px-2 flex items-center"><span className="font-bold w-24 shrink-0">号機No:</span><span className="truncate">{headerInfo.unitNo}</span></div>
+                <div className="h-[4.5] px-2 flex items-center"><span className="font-bold w-24 shrink-0">発注台数:</span><span className="truncate">{headerInfo.orderQty}</span></div>
+                <div className="h-[4.5] px-2 flex items-center"><span className="font-bold w-24 shrink-0">エレキ担当者:</span><span className="truncate">{headerInfo.elecStaff}</span></div>
               </div>
 
             </div>
 
-            {/* 明細テーブル：①②③ 軸名称をシリアルNoの右に配置・補足文字削除・文字サイズ等統一 */}
+            {/* ① 「名称」列に変更・軸名称を右脇へ配置したテーブル */}
             <table className="w-full border-collapse border border-black text-[11px]">
               <thead>
                 <tr className="bg-gray-200 border-b border-black text-center h-7 font-bold">
                   <th className="border border-black w-8">No</th>
-                  <th className="border border-black">ユニット/機器名</th>
+                  <th className="border border-black">名称</th>
                   <th className="border border-black">製品型式</th>
                   <th className="border border-black col-e-cell">シリアルNo</th>
                   <th className="border border-black w-24">軸名称</th>
@@ -507,6 +600,7 @@
                 {allRows.slice(0, 25).map((row, idx) => (
                   <tr key={idx} className="row-h-24 border-b border-black text-center leading-none">
                     <td className="border border-black font-mono">{idx + 1}</td>
+                    {/* ① 「名称」列 */}
                     <td className="border border-black text-left px-2 truncate max-w-[120px]">{row.name}</td>
                     <td className="border border-black text-left px-2 truncate max-w-[120px]">{row.model}</td>
                     <td className="border border-black col-e-cell px-1 font-mono font-semibold">
@@ -519,7 +613,7 @@
               </tbody>
             </table>
 
-            {/* フッター情報 */}
+            {/* フッター */}
             <div className="mt-2 text-[10px] text-gray-500 flex justify-between items-center">
               <span>QuickScan DB System Generated</span>
               <span>Page 1 / 1</span>
