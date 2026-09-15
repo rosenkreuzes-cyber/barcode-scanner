@@ -11,7 +11,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
-    /* A4 縦サイズ 1ページ強制印刷用のCSS設定 */
+    /* A4 縦サイズ 1ページ印刷用CSS */
     @media print {
       html, body {
         height: 100%;
@@ -40,18 +40,18 @@
       }
     }
 
-    /* E列 180px制限＋テキスト自動フィット */
+    /* E列 シリアルNo 180px制限＋自動フィット */
     .col-e-cell {
       width: 180px !important;
       max-width: 180px !important;
       min-width: 180px !important;
       word-break: break-all;
-      font-size: clamp(8px, 1.2vw, 11px);
+      font-size: clamp(8px, 1.1vw, 11px);
       line-height: 1.1;
       overflow: hidden;
     }
 
-    /* 行高さ 24px 固定 */
+    /* 全行高さ 24px 固定 */
     .row-h-24 {
       height: 24px !important;
       max-height: 24px !important;
@@ -426,27 +426,25 @@
       // ----------------------------------------------------
       const allRows = [];
       
-      // 1. 固定ユニット（軸名称入力があれば優先表示）
+      // 固定ユニットデータ
       units.forEach(u => {
-        const nameToDisplay = u.axis.trim() !== '' ? u.axis : u.label;
-        allRows.push({ name: nameToDisplay, model: u.model, serial: u.serial, remarks: u.remarks });
+        allRows.push({ name: u.label, model: u.model, serial: u.serial, axis: u.axis, remarks: u.remarks });
       });
 
-      // 2. サーボパック（② ユニット機種名にサーボパックではなく軸名称を入れる）
+      // サーボパックデータ
       servoPacks.forEach(s => {
-        const nameToDisplay = s.axis.trim() !== '' ? s.axis : s.label;
-        allRows.push({ name: nameToDisplay, model: s.model, serial: s.serial, remarks: s.remarks });
+        allRows.push({ name: s.label, model: s.model, serial: s.serial, axis: s.axis, remarks: s.remarks });
       });
 
-      // No.25 まで空行を充填
+      // No.25 まで空行で埋める
       while (allRows.length < 25) {
-        allRows.push({ name: '', model: '', serial: '', remarks: '' });
+        allRows.push({ name: '', model: '', serial: '', axis: '', remarks: '' });
       }
 
       return (
         <div className="min-h-screen bg-gray-100 text-black p-2 sm:p-6 flex flex-col items-center">
           
-          {/* 操作ボタンエリア */}
+          {/* 操作ボタン */}
           <div className="no-print w-full max-w-4xl flex justify-between items-center mb-4 bg-[#042219] p-4 rounded-xl text-[#E6DAA6]">
             <button
               onClick={() => setCurrentStep(totalSteps)}
@@ -465,52 +463,63 @@
             </div>
           </div>
 
-          {/* A4 プレビューエリア */}
+          {/* A4 印刷プレビュー用紙 */}
           <div className="print-area bg-white text-black w-full max-w-[210mm] p-[8mm] shadow-2xl rounded-sm border border-gray-300 font-sans">
             
-            {/* ① タイトル変更：製品シリアル記入シート */}
+            {/* ヘッダータイトル */}
             <div className="text-center border-b-2 border-black pb-2 mb-3">
               <h1 className="text-xl font-bold tracking-widest uppercase">製品シリアル記入シート</h1>
             </div>
 
-            {/* 基本情報グリッド */}
-            <div className="grid grid-cols-4 gap-x-2 gap-y-1 text-xs mb-3 border border-black p-2 bg-gray-50">
-              <div><span className="font-bold">製造指図書No:</span> {headerInfo.docNo}</div>
-              <div><span className="font-bold">機種名:</span> {headerInfo.modelName}</div>
-              <div><span className="font-bold">記入日:</span> {headerInfo.entryDate}</div>
-              <div><span className="font-bold">客先名:</span> {headerInfo.customer}</div>
-              <div><span className="font-bold">号機No:</span> {headerInfo.unitNo}</div>
-              <div><span className="font-bold">発注台数:</span> {headerInfo.orderQty}</div>
-              <div className="col-span-2"><span className="font-bold">エレキ担当者:</span> {headerInfo.elecStaff}</div>
+            {/* 基本情報エリア：④⑤⑥ 縦2列・格子状罫線で整形 */}
+            <div className="grid grid-cols-2 text-xs border border-black mb-3">
+              
+              {/* 左側：縦3行 (製造指図書No / 機種名 / 記入日) */}
+              <div className="border-r border-black divide-y divide-black">
+                <div className="p-1.5 flex"><span className="font-bold w-28 shrink-0">製造指図書No:</span><span className="truncate">{headerInfo.docNo}</span></div>
+                <div className="p-1.5 flex"><span className="font-bold w-28 shrink-0">機種名:</span><span className="truncate">{headerInfo.modelName}</span></div>
+                <div className="p-1.5 flex"><span className="font-bold w-28 shrink-0">記入日:</span><span className="truncate">{headerInfo.entryDate}</span></div>
+              </div>
+
+              {/* 右側：縦4行 (客先名 / 号機No / 発注台数 / エレキ担当者) */}
+              <div className="divide-y divide-black">
+                <div className="p-1 flex"><span className="font-bold w-24 shrink-0">客先名:</span><span className="truncate">{headerInfo.customer}</span></div>
+                <div className="p-1 flex"><span className="font-bold w-24 shrink-0">号機No:</span><span className="truncate">{headerInfo.unitNo}</span></div>
+                <div className="p-1 flex"><span className="font-bold w-24 shrink-0">発注台数:</span><span className="truncate">{headerInfo.orderQty}</span></div>
+                <div className="p-1 flex"><span className="font-bold w-24 shrink-0">エレキ担当者:</span><span className="truncate">{headerInfo.elecStaff}</span></div>
+              </div>
+
             </div>
 
-            {/* ④ 軸名称列を削除したテーブル */}
-            <table className="w-full border-collapse border border-black text-xs">
+            {/* 明細テーブル：①②③ 軸名称をシリアルNoの右に配置・補足文字削除・文字サイズ等統一 */}
+            <table className="w-full border-collapse border border-black text-[11px]">
               <thead>
-                <tr className="bg-gray-200 border-b border-black text-center h-7">
-                  <th className="border border-black w-10">No</th>
-                  <th className="border border-black">ユニット / 機器名（軸名称）</th>
+                <tr className="bg-gray-200 border-b border-black text-center h-7 font-bold">
+                  <th className="border border-black w-8">No</th>
+                  <th className="border border-black">ユニット/機器名</th>
                   <th className="border border-black">製品型式</th>
-                  <th className="border border-black col-e-cell">シリアルNo (E列:180px)</th>
+                  <th className="border border-black col-e-cell">シリアルNo</th>
+                  <th className="border border-black w-24">軸名称</th>
                   <th className="border border-black">備考</th>
                 </tr>
               </thead>
               <tbody>
                 {allRows.slice(0, 25).map((row, idx) => (
                   <tr key={idx} className="row-h-24 border-b border-black text-center leading-none">
-                    <td className="border border-black font-mono text-[11px]">{idx + 1}</td>
-                    <td className="border border-black text-left px-2 truncate max-w-[150px]">{row.name}</td>
-                    <td className="border border-black text-left px-2 truncate max-w-[150px]">{row.model}</td>
+                    <td className="border border-black font-mono">{idx + 1}</td>
+                    <td className="border border-black text-left px-2 truncate max-w-[120px]">{row.name}</td>
+                    <td className="border border-black text-left px-2 truncate max-w-[120px]">{row.model}</td>
                     <td className="border border-black col-e-cell px-1 font-mono font-semibold">
                       {row.serial}
                     </td>
-                    <td className="border border-black text-left px-2 truncate max-w-[120px]">{row.remarks}</td>
+                    <td className="border border-black text-left px-2 truncate">{row.axis}</td>
+                    <td className="border border-black text-left px-2 truncate max-w-[100px]">{row.remarks}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            {/* フッター */}
+            {/* フッター情報 */}
             <div className="mt-2 text-[10px] text-gray-500 flex justify-between items-center">
               <span>QuickScan DB System Generated</span>
               <span>Page 1 / 1</span>
