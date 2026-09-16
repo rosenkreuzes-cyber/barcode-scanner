@@ -108,12 +108,12 @@
         setHeaderInfo(prev => ({ ...prev, [field]: numOnly }));
       };
 
-      // ユニット・サーボパック
+      // ユニット（固定4種：軸名称入力を削除）
       const [units, setUnits] = useState([
-        { id: 'power', label: '電源ユニット', model: 'JPMC-PSD3012N', serial: '', axis: '', remarks: '' },
-        { id: 'cpu', label: 'CPU', model: 'JPMC-CP3202N-E', serial: '', axis: '', remarks: '' },
-        { id: 'base', label: 'ベースユニット', model: 'JPMC-BUB3008N-E', serial: '', axis: '', remarks: '' },
-        { id: 'lio', label: 'LIO-04', model: 'JPMC-IO2303-E', serial: '', axis: '', remarks: '' }
+        { id: 'power', label: '電源ユニット', model: 'JPMC-PSD3012N', serial: '', remarks: '' },
+        { id: 'cpu', label: 'CPU', model: 'JPMC-CP3202N-E', serial: '', remarks: '' },
+        { id: 'base', label: 'ベースユニット', model: 'JPMC-BUB3008N-E', serial: '', remarks: '' },
+        { id: 'lio', label: 'LIO-04', model: 'JPMC-IO2303-E', serial: '', remarks: '' }
       ]);
 
       const [servoPacks, setServoPacks] = useState([
@@ -132,7 +132,7 @@
           orderQty: '',
           elecStaff: ''
         }));
-        setUnits(units.map(u => ({ ...u, serial: '', axis: '', remarks: '' })));
+        setUnits(units.map(u => ({ ...u, serial: '', remarks: '' })));
         setServoPacks([{ id: 'servo_1', label: '', model: '', serial: '', axis: '', remarks: '' }]);
         setCurrentStep(0);
         alert('入力データをクリアしました（記入日は保持されます）。');
@@ -336,7 +336,8 @@
       }
 
       // ----------------------------------------------------
-      // 固定ユニット入力画面 (Step 1 - 4)
+      // 固定ユニット入力画面 (Step 1 - 4) 
+      // ※軸名称の入力フィールドを削除
       // ----------------------------------------------------
       if (currentStep >= 1 && currentStep <= 4) {
         const uIndex = currentStep - 1;
@@ -368,7 +369,6 @@
 
                 {[
                   { key: 'serial', label: 'シリアルNo' },
-                  { key: 'axis', label: '軸名称' },
                   { key: 'remarks', label: '備考' }
                 ].map(({ key, label }) => (
                   <div key={key}>
@@ -520,10 +520,9 @@
       // ----------------------------------------------------
       const allRows = [];
       
-      // 1. 固定ユニットデータ
+      // 1. 固定ユニットデータ（軸名称にはユニット名を表示）
       units.forEach(u => {
-        const displayAxis = u.axis.trim() !== '' ? u.axis : u.label;
-        allRows.push({ model: u.model, serial: u.serial, axis: displayAxis, remarks: u.remarks });
+        allRows.push({ model: u.model, serial: u.serial, axis: u.label, remarks: u.remarks });
       });
 
       // 2. 追加機器データ
@@ -566,7 +565,7 @@
               <h1 className="text-xl font-bold tracking-widest uppercase">製品シリアル記入シート</h1>
             </div>
 
-            {/* ① 基本情報エリア：文字ラベル幅を最小限にし値の入力枠幅を最大化 */}
+            {/* 基本情報エリア */}
             <div className="grid grid-cols-2 text-xs border border-black mb-3">
               <div className="border-r border-black divide-y divide-black">
                 <div className="h-6 px-2 flex items-center">
@@ -603,7 +602,7 @@
               </div>
             </div>
 
-            {/* ② 横スクロール対応のテーブルコンテナ */}
+            {/* テーブルコンテナ */}
             <div className="table-container w-full overflow-x-auto">
               <table className="preview-table min-w-[640px] w-full border-collapse border border-black text-[11px]">
                 <thead>
@@ -624,7 +623,6 @@
                         {row.serial}
                       </td>
                       <td className="border border-black text-left px-2 truncate">{row.axis}</td>
-                      {/* 備考欄も横スクロールで末尾まで視認可能 */}
                       <td className="border border-black text-left px-2 whitespace-nowrap overflow-hidden text-ellipsis">{row.remarks}</td>
                     </tr>
                   ))}
