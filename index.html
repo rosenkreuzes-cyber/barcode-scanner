@@ -88,8 +88,9 @@
       // スキャナー用ステート
       const [isScanning, setIsScanning] = useState(false);
       const [scanTarget, setScanTarget] = useState(null);
-      const [scanBoxSize, setScanBoxSize] = useState(250); // スキャン枠サイズ (初期値 250px)
-      const [scannedResult, setScannedResult] = useState(null); // スキャン一時保持用
+      const [scanBoxSize, setScanBoxSize] = useState(250); // 初期サイズ 250px
+      const [customBoxInput, setCustomBoxInput] = useState(250); // 手動入力用ステート
+      const [scannedResult, setScannedResult] = useState(null);
       const html5QrcodeScannerRef = useRef(null);
 
       // 本日の日付を自動取得
@@ -110,7 +111,7 @@
         setHeaderInfo(prev => ({ ...prev, [field]: numOnly }));
       };
 
-      // ユニット（固定4種：入力画面には軸名称入力なし）
+      // ユニット（固定4種）
       const [units, setUnits] = useState([
         { id: 'power', label: '電源ユニット', model: 'JPMC-PSD3012N', serial: '', remarks: '' },
         { id: 'cpu', label: 'CPU', model: 'JPMC-CP3202N-E', serial: '', remarks: '' },
@@ -171,7 +172,7 @@
       };
 
       // カメラ起動スキャン処理
-      const startScanner = (type, index, field) => {
+      const startScannerWithBox = (type, index, field, boxSize) => {
         setScanTarget({ type, index, field });
         setScannedResult(null);
         setIsScanning(true);
@@ -183,9 +184,8 @@
 
             html5QrCode.start(
               { facingMode: "environment" },
-              { fps: 10, qrbox: { width: scanBoxSize, height: Math.floor(scanBoxSize * 0.6) } },
+              { fps: 10, qrbox: { width: boxSize, height: Math.floor(boxSize * 0.6) } },
               (decodedText) => {
-                // スキャン成功時は一旦読み込み停止してダイアログに表示
                 setScannedResult(decodedText);
                 if (html5QrcodeScannerRef.current) {
                   html5QrcodeScannerRef.current.stop().catch(() => {});
@@ -200,6 +200,29 @@
             });
           }
         }, 300);
+      };
+
+      const startScanner = (type, index, field) => {
+        startScannerWithBox(type, index, field, scanBoxSize);
+      };
+
+      // 手動入力されたサイズを適用する処理
+      const applyCustomBoxSize = (targetSize) => {
+        const validSize = Math.max(100, Math.min(400, Number(targetSize) || 250));
+        setScanBoxSize(validSize);
+        setCustomBoxInput(validSize);
+
+        if (scanTarget) {
+          if (html5QrcodeScannerRef.current && html5QrcodeScannerRef.current.isScanning) {
+            html5QrcodeScannerRef.current.stop().then(() => {
+              startScannerWithBox(scanTarget.type, scanTarget.index, scanTarget.field, validSize);
+            }).catch(() => {
+              startScannerWithBox(scanTarget.type, scanTarget.index, scanTarget.field, validSize);
+            });
+          } else {
+            startScannerWithBox(scanTarget.type, scanTarget.index, scanTarget.field, validSize);
+          }
+        }
       };
 
       // 決定ボタン押下時
@@ -218,7 +241,7 @@
       // 再スキャンボタン押下時
       const rescan = () => {
         if (scanTarget) {
-          startScanner(scanTarget.type, scanTarget.index, scanTarget.field);
+          startScannerWithBox(scanTarget.type, scanTarget.index, scanTarget.field, scanBoxSize);
         }
       };
 
@@ -243,6 +266,97 @@
 
       const handlePrint = () => {
         window.print();
+      };
+
+      // カメラ表示用共通モーダルコンポーネント
+      const renderScannerModal = () => {
+        if (!isScanning) return null;
+
+        return (
+          <div className="fixed inset-0 bg-black/95 flex flex-col items-center justify-between p-4 z-50">
+            {/* ヘッダー情報 */}
+            <div className="w-full max-w-sm text-center pt-2">
+              <div className="text-white text-base font-bold mb-1">バーコード / QRスキャン</div>
+              <div className="text-xs text-gray-300">枠内に対象をあわせてください</div>
+            </div>
+
+            {/* スキャンビューポートエリア */}
+            <div className="w-full max-w-sm flex flex-col items-center my-auto">
+              <div id="reader" className="w-full bg-black rounded-xl overflow-hidden border border-gray-700"></div>
+
+              {/* 手動数値入力による枠サイズ変更コントロール */}
+              {!scannedResult && (
+                <div className="w-full mt-3 bg-gray-900/90 p-2.5 rounded-xl border border-gray-700">
+                  <div className="text-xs text-gray-300 font-bold mb-2 text-center">
+                    スキャン枠サイズ（手動指定）
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => applyCustomBoxSize(Number(scanBoxSize) - 20)}
+                      className="bg-gray-800 text-white border border-gray-600 px-3 py-2 rounded-lg text-xs font-bold active:scale-95"
+                    >
+                      -20
+                    </button>
+                    <div className="flex-1 flex items-center bg-black border border-gray-600 rounded-lg overflow-hidden px-2">
+                      <input
+                        type="number"
+                        value={customBoxInput}
+                        onChange={(e) => setCustomBoxInput(e.target.value)}
+                        className="w-full bg-transparent text-center text-white font-mono font-bold py-1.5 focus:outline-none text-sm"
+                        placeholder="250"
+                      />
+                      <span className="text-xs text-gray-400 font-mono pl-1">px</span>
+                    </div>
+                    <button
+                      onClick={() => applyCustomBoxSize(Number(scanBoxSize) + 20)}
+                      className="bg-gray-800 text-white border border-gray-600 px-3 py-2 rounded-lg text-xs font-bold active:scale-95"
+                    >
+                      +20
+                    </button>
+                    <button
+                      onClick={() => applyCustomBoxSize(customBoxInput)}
+                      className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2 rounded-lg text-xs active:scale-95"
+                    >
+                      適用
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* スキャン枠直下の決定・再スキャンエリア */}
+              {scannedResult !== null && (
+                <div className="w-full bg-[#093325] border-2 border-[#F5D887] p-3 rounded-2xl text-center shadow-2xl mt-3">
+                  <div className="text-[11px] text-[#E6DAA6]/70 mb-1 font-bold">読み取り結果</div>
+                  <div className="text-lg font-mono font-bold text-[#F5D887] break-all bg-black/50 p-2 rounded-xl mb-3 border border-[#E6DAA6]/30">
+                    {scannedResult}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={rescan}
+                      className="flex-1 bg-gray-700 text-white font-bold py-2.5 rounded-xl text-xs active:scale-95"
+                    >
+                      🔄 再スキャン
+                    </button>
+                    <button
+                      onClick={confirmScanResult}
+                      className="flex-1 bg-[#F5D887] text-[#042219] font-bold py-2.5 rounded-xl text-xs active:scale-95 shadow-lg"
+                    >
+                      ✅ これで決定
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* キャンセルボタン */}
+            <button
+              onClick={stopScanner}
+              className="w-full max-w-sm py-3 bg-red-600 text-white font-bold rounded-full mb-2 active:scale-95"
+            >
+              キャンセル
+            </button>
+          </div>
+        );
       };
 
       // ----------------------------------------------------
@@ -424,67 +538,7 @@
               </button>
             </div>
 
-            {/* カメラモーダル表示 */}
-            {isScanning && (
-              <div className="fixed inset-0 bg-black/95 flex flex-col items-center justify-between p-4 z-50">
-                <div className="w-full max-w-sm text-center pt-2">
-                  <div className="text-white text-base font-bold mb-1">バーコード / QRスキャン</div>
-                  <div className="text-xs text-gray-300">赤枠内に対象をあわせてください</div>
-                </div>
-
-                <div id="reader" className="w-full max-w-sm bg-black rounded-xl overflow-hidden my-auto border border-gray-700"></div>
-
-                {/* スキャン枠サイズ変更スライダー */}
-                {!scannedResult && (
-                  <div className="w-full max-w-sm bg-gray-900/80 p-3 rounded-xl border border-gray-700 mb-2">
-                    <label className="text-xs text-gray-300 flex justify-between mb-1">
-                      <span>スキャン枠の大きさ</span>
-                      <span>{scanBoxSize}px</span>
-                    </label>
-                    <input
-                      type="range"
-                      min="150"
-                      max="320"
-                      step="10"
-                      value={scanBoxSize}
-                      onChange={(e) => setScanBoxSize(Number(e.target.value))}
-                      className="w-full accent-[#F5D887]"
-                    />
-                  </div>
-                )}
-
-                {/* スキャン結果ダイアログ（再スキャン / 決定） */}
-                {scannedResult !== null ? (
-                  <div className="w-full max-w-sm bg-[#093325] border-2 border-[#F5D887] p-4 rounded-2xl text-center shadow-2xl mb-4">
-                    <div className="text-xs text-[#E6DAA6]/70 mb-1 font-bold">読み取り結果</div>
-                    <div className="text-xl font-mono font-bold text-[#F5D887] break-all bg-black/40 p-3 rounded-xl mb-4 border border-[#E6DAA6]/30">
-                      {scannedResult}
-                    </div>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={rescan}
-                        className="flex-1 bg-gray-700 text-white font-bold py-3 rounded-xl text-sm active:scale-95"
-                      >
-                        🔄 再スキャン
-                      </button>
-                      <button
-                        onClick={confirmScanResult}
-                        className="flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-sm active:scale-95 shadow-lg"
-                      >
-                        ✅ これで決定
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={stopScanner}
-                    className="w-full max-w-sm py-3 bg-red-600 text-white font-bold rounded-full mb-2 active:scale-95"
-                  >
-                    キャンセル
-                  </button>
-                )}
-              </div>
-            )}
+            {renderScannerModal()}
           </div>
         );
       }
@@ -568,67 +622,7 @@
               </button>
             </div>
 
-            {/* カメラモーダル表示 */}
-            {isScanning && (
-              <div className="fixed inset-0 bg-black/95 flex flex-col items-center justify-between p-4 z-50">
-                <div className="w-full max-w-sm text-center pt-2">
-                  <div className="text-white text-base font-bold mb-1">バーコード / QRスキャン</div>
-                  <div className="text-xs text-gray-300">赤枠内に対象をあわせてください</div>
-                </div>
-
-                <div id="reader" className="w-full max-w-sm bg-black rounded-xl overflow-hidden my-auto border border-gray-700"></div>
-
-                {/* スキャン枠サイズ変更スライダー */}
-                {!scannedResult && (
-                  <div className="w-full max-w-sm bg-gray-900/80 p-3 rounded-xl border border-gray-700 mb-2">
-                    <label className="text-xs text-gray-300 flex justify-between mb-1">
-                      <span>スキャン枠の大きさ</span>
-                      <span>{scanBoxSize}px</span>
-                    </label>
-                    <input
-                      type="range"
-                      min="150"
-                      max="320"
-                      step="10"
-                      value={scanBoxSize}
-                      onChange={(e) => setScanBoxSize(Number(e.target.value))}
-                      className="w-full accent-[#F5D887]"
-                    />
-                  </div>
-                )}
-
-                {/* スキャン結果ダイアログ（再スキャン / 決定） */}
-                {scannedResult !== null ? (
-                  <div className="w-full max-w-sm bg-[#093325] border-2 border-[#F5D887] p-4 rounded-2xl text-center shadow-2xl mb-4">
-                    <div className="text-xs text-[#E6DAA6]/70 mb-1 font-bold">読み取り結果</div>
-                    <div className="text-xl font-mono font-bold text-[#F5D887] break-all bg-black/40 p-3 rounded-xl mb-4 border border-[#E6DAA6]/30">
-                      {scannedResult}
-                    </div>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={rescan}
-                        className="flex-1 bg-gray-700 text-white font-bold py-3 rounded-xl text-sm active:scale-95"
-                      >
-                        🔄 再スキャン
-                      </button>
-                      <button
-                        onClick={confirmScanResult}
-                        className="flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-sm active:scale-95 shadow-lg"
-                      >
-                        ✅ これで決定
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={stopScanner}
-                    className="w-full max-w-sm py-3 bg-red-600 text-white font-bold rounded-full mb-2 active:scale-95"
-                  >
-                    キャンセル
-                  </button>
-                )}
-              </div>
-            )}
+            {renderScannerModal()}
           </div>
         );
       }
@@ -638,7 +632,7 @@
       // ----------------------------------------------------
       const allRows = [];
       
-      // 1. 固定ユニットデータ（機器名称にはユニット名を表示）
+      // 1. 固定ユニットデータ
       units.forEach(u => {
         allRows.push({ model: u.model, serial: u.serial, axis: u.label, remarks: u.remarks });
       });
@@ -720,7 +714,7 @@
               </div>
             </div>
 
-            {/* テーブルコンテナ（「軸名称」→「機器名称」へ改称） */}
+            {/* テーブルコンテナ */}
             <div className="table-container w-full overflow-x-auto">
               <table className="preview-table min-w-[640px] w-full border-collapse border border-black text-[11px]">
                 <thead>
