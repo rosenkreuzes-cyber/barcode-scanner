@@ -57,7 +57,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    // APIキーを引用符内に正しく格納
+    // ご自身のGemini APIキーを設定してください
     const GEMINI_API_KEY = 'AQ.Ab8RN6JYe5jm0Ahp2R8U05Jij4NidKdUKfBqDwOF2djQpRyGbA';
 
     function App() {
@@ -175,14 +175,22 @@
 
         const base64Data = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
 
+        const promptText = `この画像は製品ラベル・銘板です。画像から以下の情報を抽出してください。
+- 型式 (Model): 最も大きく書かれている型番（例: SGDXS-2R8A40A など）
+- シリアル番号 (S/N): S/N: や SER NO: の後ろにある英数字
+- バージョン (Version/Rev): Rev や Ver、あるいは製造年月・バージョン表記
+
+必ず以下のJSON形式のみで回答を出力してください。余計な解説は不要です。
+{"model": "型番文字列", "sn": "シリアル文字列", "version": "バージョン文字列"}`;
+
         try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: [{
                 parts: [
-                  { text: "画像に含まれる製造ラベル・銘板から、型式(Model)、シリアル番号(Serial No / S/N)、バージョン(Version / Rev)を抽出してJSONで返してください。形式: {\"model\": \"...\", \"sn\": \"...\", \"version\": \"...\"} のみ出力してください。" },
+                  { text: promptText },
                   { inline_data: { mime_type: "image/jpeg", data: base64Data } }
                 ]
               }]
@@ -193,7 +201,9 @@
           const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
           setOcrRawText(responseText);
 
-          const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+          const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+          const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
             setOcrResult({
@@ -207,7 +217,7 @@
           }
         } catch (error) {
           console.error(error);
-          setOcrStatus('通信エラーが発生しました');
+          setOcrStatus('通信・解析エラーが発生しました');
         } finally {
           setOcrLoading(false);
         }
