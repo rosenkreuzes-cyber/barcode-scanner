@@ -184,8 +184,8 @@
 見つからない項目は "未検出" としてください。`;
 
         try {
-          // 正しい標準モデル gemini-1.5-flash に修正
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          // エンドポイントを gemini-2.5-flash に更新
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -635,7 +635,6 @@
       );
     }
 
-    // エラーキャッチ用コンポーネント
     class ErrorBoundary extends React.Component {
       constructor(props) {
         super(props);
