@@ -58,7 +58,7 @@
     const { useState, useEffect, useRef } = React;
 
     // ご自身のGemini APIキーを設定してください
-    const GEMINI_API_KEY = 'AQ.Ab8RN6I8ezh8x2Xdxw9yFFx3lkux_kEaCu-LokCU74SW2vDjkQ';
+    const GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY_HERE';
 
     function App() {
       const [headerInfo, setHeaderInfo] = useState({
@@ -184,8 +184,8 @@
 見つからない項目は "未検出" としてください。`;
 
         try {
-          // エラーメッセージの指示に従い、gemini-3.6-flash を使用するように更新
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          // 正しい標準モデル gemini-1.5-flash に修正
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -213,4 +213,455 @@
           const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
           setOcrRawText(responseText);
 
-          const cleanText = responseText.replace(/```json/g, '').replace(/
+          const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+          const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            setOcrResult({
+              model: parsed.model || '未検出',
+              sn: parsed.sn || '未検出',
+              version: parsed.version || '未検出'
+            });
+            setOcrStatus('AI解析完了');
+          } else {
+            setOcrStatus('情報が見つかりませんでした');
+          }
+        } catch (error) {
+          console.error("Fetch Error:", error);
+          setOcrStatus('通信・解析エラーが発生しました');
+        } finally {
+          setOcrLoading(false);
+        }
+      };
+
+      const startScannerWithBox = (type, index, field, boxSize) => {
+        setScanTarget({ type, index, field });
+        setScannedResult(null);
+        setDetectedFormat('スキャン待機中...');
+        setIsScanning(true);
+
+        setTimeout(() => {
+          if (window.Html5Qrcode) {
+            const html5QrCode = new Html5Qrcode("reader");
+            html5QrcodeScannerRef.current = html5QrCode;
+            html5QrCode.start(
+              { facingMode: "environment" },
+              { fps: 10, qrbox: { width: boxSize, height: Math.floor(boxSize * 0.6) } },
+              (decodedText, decodedResult) => {
+                setDetectedFormat(decodedResult?.result?.format?.formatName || 'CODE_DETECTED');
+                setScannedResult(decodedText);
+                if (html5QrcodeScannerRef.current) html5QrcodeScannerRef.current.stop().catch(() => {});
+              },
+              () => {}
+            ).catch(err => {
+              alert("カメラ起動失敗。ダミーデータを適用します。");
+              setDetectedFormat("CODE_128 (DUMMY)");
+              setScannedResult(`SN-${Math.floor(100000 + Math.random() * 900000)}`);
+            });
+          }
+        }, 300);
+      };
+
+      const applyCustomBoxSize = (targetSize) => {
+        const validSize = Math.max(100, Math.min(400, Number(targetSize) || 250));
+        setScanBoxSize(validSize);
+        setCustomBoxInput(validSize);
+
+        if (scanTarget) {
+          if (html5QrcodeScannerRef.current && html5QrcodeScannerRef.current.isScanning) {
+            html5QrcodeScannerRef.current.stop().then(() => startScannerWithBox(scanTarget.type, scanTarget.index, scanTarget.field, validSize)).catch(() => startScannerWithBox(scanTarget.type, scanTarget.index, scanTarget.field, validSize));
+          } else {
+            startScannerWithBox(scanTarget.type, scanTarget.index, scanTarget.field, validSize);
+          }
+        }
+      };
+
+      const confirmScanResult = () => {
+        if (scanTarget && scannedResult !== null) {
+          const { type, index, field } = scanTarget;
+          if (type === 'unit') handleUnitChange(index, field, scannedResult);
+          else handleServoChange(index, field, scannedResult);
+        }
+        stopScanner();
+      };
+
+      const rescan = () => {
+        if (scanTarget) startScannerWithBox(scanTarget.type, scanTarget.index, scanTarget.field, scanBoxSize);
+      };
+
+      const stopScanner = () => {
+        if (html5QrcodeScannerRef.current && html5QrcodeScannerRef.current.isScanning) {
+          html5QrcodeScannerRef.current.stop().then(() => { html5QrcodeScannerRef.current.clear(); setIsScanning(false); setScanTarget(null); setScannedResult(null); }).catch(() => { setIsScanning(false); setScanTarget(null); setScannedResult(null); });
+        } else {
+          setIsScanning(false); setScanTarget(null); setScannedResult(null);
+        }
+      };
+
+      const renderScannerModal = () => {
+        if (!isScanning) return null;
+
+        return (
+          <div className="fixed inset-0 bg-black/95 flex flex-col items-center justify-between p-4 z-50">
+            <div className="w-full max-w-sm text-center pt-2">
+              <div className="text-white text-base font-bold mb-1">バーコード / QRスキャン</div>
+              <div className="inline-flex items-center gap-1.5 bg-[#093325] border border-[#00ffcc]/40 px-3 py-1 rounded-full text-xs font-mono font-bold text-[#00ffcc]">
+                <span className="w-2 h-2 rounded-full bg-[#00ffcc] animate-pulse"></span>
+                <span>Code規格: {detectedFormat}</span>
+              </div>
+            </div>
+
+            <div className="w-full max-w-sm flex flex-col items-center my-auto">
+              <div id="reader" className="w-full bg-black rounded-xl overflow-hidden border border-gray-700"></div>
+
+              {!scannedResult && (
+                <div className="w-full mt-3 bg-gray-900/90 p-2.5 rounded-xl border border-gray-700">
+                  <div className="text-xs text-gray-300 font-bold mb-2 text-center">スキャン枠サイズ（手動指定）</div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => applyCustomBoxSize(Number(scanBoxSize) - 20)} className="bg-gray-800 text-white border border-gray-600 px-3 py-2 rounded-lg text-xs font-bold active:scale-95">-20</button>
+                    <div className="flex-1 flex items-center bg-black border border-gray-600 rounded-lg overflow-hidden px-2">
+                      <input type="number" value={customBoxInput} onChange={(e) => setCustomBoxInput(e.target.value)} className="w-full bg-transparent text-center text-white font-mono font-bold py-1.5 focus:outline-none text-sm" placeholder="250" />
+                      <span className="text-xs text-gray-400 font-mono pl-1">px</span>
+                    </div>
+                    <button onClick={() => applyCustomBoxSize(Number(scanBoxSize) + 20)} className="bg-gray-800 text-white border border-gray-600 px-3 py-2 rounded-lg text-xs font-bold active:scale-95">+20</button>
+                    <button onClick={() => applyCustomBoxSize(customBoxInput)} className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2 rounded-lg text-xs active:scale-95">適用</button>
+                  </div>
+                </div>
+              )}
+
+              {scannedResult !== null && (
+                <div className="w-full bg-[#093325] border-2 border-[#F5D887] p-3 rounded-2xl text-center shadow-2xl mt-3">
+                  <div className="flex justify-between items-center text-[11px] text-[#E6DAA6]/70 mb-1 px-1 font-bold">
+                    <span>読み取り結果</span>
+                    <span className="text-[#00ffcc] font-mono">規格: {detectedFormat}</span>
+                  </div>
+                  <div className="text-lg font-mono font-bold text-[#F5D887] break-all bg-black/50 p-2 rounded-xl mb-3 border border-[#E6DAA6]/30">{scannedResult}</div>
+                  <div className="flex gap-2">
+                    <button onClick={rescan} className="flex-1 bg-gray-700 text-white font-bold py-2.5 rounded-xl text-xs active:scale-95">🔄 再スキャン</button>
+                    <button onClick={confirmScanResult} className="flex-1 bg-[#F5D887] text-[#042219] font-bold py-2.5 rounded-xl text-xs active:scale-95 shadow-lg">✅ これで決定</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button onClick={stopScanner} className="w-full max-w-sm py-3 bg-red-600 text-white font-bold rounded-full mb-2 active:scale-95">キャンセル</button>
+          </div>
+        );
+      };
+
+      if (currentStep === 0) {
+        return (
+          <div className="min-h-screen p-5 flex flex-col justify-between max-w-lg mx-auto">
+            <div>
+              <div className="text-center my-6">
+                <h1 className="text-3xl font-bold tracking-wider text-[#F5D887]">QuickScan DB</h1>
+                <p className="text-sm text-[#E6DAA6]/70 mt-2">基本情報の入力</p>
+              </div>
+
+              <div className="space-y-4 bg-[#093325]/40 p-5 rounded-2xl border border-[#E6DAA6]/30 shadow-lg">
+                <div>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">製造指図書No</label>
+                  <input type="text" value={headerInfo.docNo} onChange={(e) => handleUppercaseChange('docNo', e.target.value)} placeholder="例: ORD-2026-X" className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">機種名</label>
+                  <input type="text" value={headerInfo.modelName} onChange={(e) => handleUppercaseChange('modelName', e.target.value)} placeholder="例: MODEL-A100" className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">記入日（自動取得）</label>
+                  <input type="text" readOnly value={headerInfo.entryDate} className="w-full bg-[#093325]/50 border border-[#E6DAA6]/20 rounded-xl px-4 py-3 text-base text-[#E6DAA6]/70 cursor-not-allowed" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">客先名</label>
+                  <input type="text" value={headerInfo.customer} onChange={(e) => handleUppercaseChange('customer', e.target.value)} placeholder="例: TANAKA CORP" className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">号機NO.</label>
+                    <input type="text" inputMode="numeric" value={headerInfo.unitNo} onChange={(e) => handleNumberChange('unitNo', e.target.value)} placeholder="数字のみ" className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] focus:outline-none focus:border-[#F5D887]" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">発注台数</label>
+                    <input type="text" inputMode="numeric" value={headerInfo.orderQty} onChange={(e) => handleNumberChange('orderQty', e.target.value)} placeholder="数字のみ" className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] focus:outline-none focus:border-[#F5D887]" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">エレキ担当者</label>
+                  <input type="text" value={headerInfo.elecStaff} onChange={(e) => handleUppercaseChange('elecStaff', e.target.value)} placeholder="例: YAMADA" className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]" />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 space-y-3">
+              <button onClick={() => setCurrentStep(0.5)} className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg active:scale-95 transition-all shadow-xl">
+                次へ（AI OCRテスト画面へ）
+              </button>
+              <button onClick={handleClearData} className="w-full border border-red-500/50 text-red-400 py-3 rounded-xl text-base hover:bg-red-950/20 active:scale-95 transition-all">
+                入力情報をクリア
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      if (currentStep === 0.5) {
+        return (
+          <div className="min-h-screen p-4 flex flex-col justify-between max-w-lg mx-auto">
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <button onClick={() => { stopOcrCamera(); setCurrentStep(0); }} className="text-[#E6DAA6] font-medium">← 初期画面に戻る</button>
+                <span className="text-xs font-mono bg-[#093325] px-3 py-1 rounded-full border border-[#00ffcc]/30 text-[#00ffcc]">AI OCR MODE</span>
+              </div>
+
+              <div className="text-center mb-4">
+                <h2 className="text-xl font-bold text-[#F5D887]">AI (Gemini) OCR テスト</h2>
+                <p className="text-xs text-[#E6DAA6]/70 mt-1">銘板画像からの自動抽出機能</p>
+              </div>
+
+              <div className="bg-[#093325]/60 p-3 rounded-2xl border border-[#E6DAA6]/30 mb-4 flex flex-col items-center">
+                <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden mb-3 border border-gray-700 flex items-center justify-center">
+                  <video ref={videoRef} playsInline muted className={`w-full h-full object-cover ${!ocrCameraActive ? 'hidden' : ''}`} />
+                  {!ocrCameraActive && <span className="text-xs text-gray-400 font-mono">カメラ停止中</span>}
+                  {ocrCameraActive && (
+                    <div className="absolute inset-4 border-2 border-dashed border-[#F5D887]/70 rounded-lg pointer-events-none flex items-center justify-center">
+                      <span className="text-[10px] bg-black/60 text-[#F5D887] px-2 py-0.5 rounded">銘板・ラベル全体を枠内に撮影</span>
+                    </div>
+                  )}
+                </div>
+
+                <canvas ref={canvasRef} className="hidden" />
+
+                <div className="flex gap-2 w-full">
+                  {!ocrCameraActive ? (
+                    <button onClick={startOcrCamera} className="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-2.5 rounded-xl text-xs active:scale-95">📷 カメラを起動</button>
+                  ) : (
+                    <>
+                      <button onClick={captureAndOcrCloud} disabled={ocrLoading} className="flex-1 bg-[#F5D887] text-[#042219] font-bold py-2.5 rounded-xl text-xs active:scale-95 disabled:opacity-50">
+                        {ocrLoading ? 'AI解析中...' : '☁️ 撮影 & AI OCR実行'}
+                      </button>
+                      <button onClick={stopOcrCamera} className="bg-gray-800 text-gray-300 font-bold px-4 py-2.5 rounded-xl text-xs active:scale-95">停止</button>
+                    </>
+                  )}
+                </div>
+
+                <div className="mt-2 text-[11px] font-mono text-[#00ffcc]">Status: {ocrStatus}</div>
+              </div>
+
+              <div className="bg-[#093325] p-4 rounded-2xl border border-[#F5D887]/50 shadow-xl space-y-3">
+                <div className="text-xs font-bold text-[#F5D887] border-b border-[#E6DAA6]/20 pb-1">🔍 AI OCR 解析結果</div>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between items-center bg-black/40 p-2 rounded-lg">
+                    <span className="text-gray-400 font-bold">型式 (Model):</span>
+                    <span className="font-mono font-bold text-[#00ffcc]">{ocrResult.model}</span>
+                  </div>
+                  <div className="flex justify-between items-center bg-black/40 p-2 rounded-lg">
+                    <span className="text-gray-400 font-bold">シリアル (S/N):</span>
+                    <span className="font-mono font-bold text-[#00ffcc]">{ocrResult.sn}</span>
+                  </div>
+                  <div className="flex justify-between items-center bg-black/40 p-2 rounded-lg">
+                    <span className="text-gray-400 font-bold">Version / Rev:</span>
+                    <span className="font-mono font-bold text-[#00ffcc]">{ocrResult.version}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4">
+              <button onClick={() => { stopOcrCamera(); setCurrentStep(1); }} className="w-full bg-[#F5D887] text-[#042219] font-bold py-3.5 rounded-full text-base active:scale-95 transition-all shadow-xl">
+                次へ（ユニット入力 Step 1へ）
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      if (currentStep >= 1 && currentStep <= 4) {
+        const uIndex = currentStep - 1;
+        const unit = units[uIndex];
+
+        return (
+          <div className="min-h-screen p-5 flex flex-col justify-between max-w-lg mx-auto">
+            <div>
+              <div className="flex justify-between items-center text-base mb-6">
+                <button onClick={() => setCurrentStep(currentStep === 1 ? 0.5 : currentStep - 1)} className="text-[#E6DAA6] font-medium">← 前へ</button>
+                <span className="text-sm font-mono bg-[#093325] px-3 py-1 rounded-full">{currentStep} / {4 + servoPacks.length}</span>
+              </div>
+
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-bold text-[#F5D887]">{unit.label}</h2>
+                <p className="text-sm text-[#E6DAA6]/70 mt-1">{unit.model}</p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm mb-1">製品型式</label>
+                  <input type="text" disabled value={unit.model} className="w-full bg-[#093325]/50 border border-[#E6DAA6]/20 rounded-xl px-4 py-3 text-base text-[#E6DAA6]/70" />
+                </div>
+                {[{ key: 'serial', label: 'シリアルNo' }, { key: 'remarks', label: '備考' }].map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="block text-sm mb-1">{label}</label>
+                    <div className="flex gap-2">
+                      <input type="text" value={unit[key]} onChange={(e) => handleUnitChange(uIndex, key, e.target.value)} placeholder="入力またはスキャン" className="flex-1 bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6]" />
+                      <button onClick={() => startScannerWithBox('unit', uIndex, key, scanBoxSize)} className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-lg hover:bg-[#093325]/80 active:scale-95">📷</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-6">
+              <button onClick={() => setCurrentStep(currentStep + 1)} className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg active:scale-95 transition-all">次へ</button>
+            </div>
+
+            {renderScannerModal()}
+          </div>
+        );
+      }
+
+      const servoIndex = currentStep - 5;
+      const totalSteps = 4 + servoPacks.length;
+
+      if (currentStep >= 5 && currentStep <= totalSteps) {
+        const currentPack = servoPacks[servoIndex];
+
+        return (
+          <div className="min-h-screen p-5 flex flex-col justify-between max-w-lg mx-auto">
+            <div>
+              <div className="flex justify-between items-center text-base mb-6">
+                <button onClick={() => setCurrentStep(currentStep - 1)} className="text-[#E6DAA6] font-medium">← 前へ</button>
+                <span className="text-sm font-mono bg-[#093325] px-3 py-1 rounded-full">{currentStep} / {totalSteps}</span>
+              </div>
+
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-bold text-[#F5D887]">{currentPack.axis ? `${currentPack.axis}` : `追加機器 ${servoIndex + 1}`}</h2>
+                <p className="text-sm text-[#E6DAA6]/70 mt-1">スキャン・入力を行ってください</p>
+              </div>
+
+              <div className="space-y-4">
+                {[{ key: 'model', label: '製品型式' }, { key: 'serial', label: 'シリアルNo' }, { key: 'axis', label: '機器名称' }, { key: 'remarks', label: '備考' }].map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="block text-sm mb-1">{label}</label>
+                    <div className="flex gap-2">
+                      <input type="text" value={currentPack[key]} onChange={(e) => handleServoChange(servoIndex, key, e.target.value)} placeholder="入力またはスキャン" className="flex-1 bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6]" />
+                      <button onClick={() => startScannerWithBox('servo', servoIndex, key, scanBoxSize)} className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-lg hover:bg-[#093325]/80 active:scale-95">📷</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <button onClick={handleAddServo} className="flex-1 border border-dashed border-[#E6DAA6]/70 text-[#E6DAA6] rounded-xl py-3 text-base font-medium">＋ 機器を追加</button>
+                {servoPacks.length > 1 && (
+                  <button onClick={() => handleRemoveServo(servoIndex)} className="border border-red-500/50 text-red-400 rounded-xl px-4 py-3 text-base">削除</button>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-6">
+              <button onClick={() => setCurrentStep(currentStep + 1)} className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg active:scale-95 transition-all">
+                {servoIndex < servoPacks.length - 1 ? '次の機器へ' : 'プレビュー（印刷）へ'}
+              </button>
+            </div>
+
+            {renderScannerModal()}
+          </div>
+        );
+      }
+
+      const allRows = [];
+      units.forEach(u => allRows.push({ model: u.model, serial: u.serial, axis: u.label, remarks: u.remarks }));
+      servoPacks.forEach(s => allRows.push({ model: s.model, serial: s.serial, axis: s.axis, remarks: s.remarks }));
+      while (allRows.length < 25) allRows.push({ model: '', serial: '', axis: '', remarks: '' });
+
+      return (
+        <div className="min-h-screen bg-gray-100 text-black p-2 sm:p-6 flex flex-col items-center">
+          <div className="no-print w-full max-w-4xl flex justify-between items-center mb-4 bg-[#042219] p-4 rounded-xl text-[#E6DAA6]">
+            <button onClick={() => setCurrentStep(totalSteps)} className="px-4 py-2 bg-[#093325] border border-[#E6DAA6]/40 rounded-lg text-sm">← 入力に戻る</button>
+            <button onClick={() => window.print()} className="px-6 py-2.5 bg-[#F5D887] text-[#042219] font-bold rounded-lg text-sm shadow-md active:scale-95 transition-all flex items-center gap-2">
+              <span>🖨️</span><span>印刷 (Sharpdesk Mobile / PDF)</span>
+            </button>
+          </div>
+
+          <div className="print-area bg-white text-black w-full max-w-[210mm] p-[8mm] shadow-2xl rounded-sm border border-gray-300 font-sans">
+            <div className="text-center border-b-2 border-black pb-2 mb-3">
+              <h1 className="text-xl font-bold tracking-widest uppercase">製品シリアル記入シート</h1>
+            </div>
+
+            <div className="grid grid-cols-2 text-xs border border-black mb-3">
+              <div className="border-r border-black divide-y divide-black">
+                <div className="h-6 px-2 flex items-center"><span className="font-bold shrink-0 mr-1">製造指図書No:</span><span className="flex-1 font-semibold truncate">{headerInfo.docNo}</span></div>
+                <div className="h-6 px-2 flex items-center"><span className="font-bold shrink-0 mr-1">機種名:</span><span className="flex-1 font-semibold truncate">{headerInfo.modelName}</span></div>
+                <div className="h-6 px-2 flex items-center"><span className="font-bold shrink-0 mr-1">記入日:</span><span className="flex-1 font-semibold truncate">{headerInfo.entryDate}</span></div>
+              </div>
+              <div className="divide-y divide-black">
+                <div className="h-[4.5] px-2 flex items-center"><span className="font-bold shrink-0 mr-1">客先名:</span><span className="flex-1 font-semibold truncate">{headerInfo.customer}</span></div>
+                <div className="h-[4.5] px-2 flex items-center"><span className="font-bold shrink-0 mr-1">号機No:</span><span className="flex-1 font-semibold truncate">{headerInfo.unitNo}</span></div>
+                <div className="h-[4.5] px-2 flex items-center"><span className="font-bold shrink-0 mr-1">発注台数:</span><span className="flex-1 font-semibold truncate">{headerInfo.orderQty}</span></div>
+                <div className="h-[4.5] px-2 flex items-center"><span className="font-bold shrink-0 mr-1">エレキ担当者:</span><span className="flex-1 font-semibold truncate">{headerInfo.elecStaff}</span></div>
+              </div>
+            </div>
+
+            <div className="table-container w-full overflow-x-auto">
+              <table className="preview-table min-w-[640px] w-full border-collapse border border-black text-[11px]">
+                <thead>
+                  <tr className="bg-gray-200 border-b border-black text-center h-7 font-bold">
+                    <th className="border border-black w-8 shrink-0">No</th>
+                    <th className="border border-black min-w-[130px]">製品型式</th>
+                    <th className="border border-black col-e-cell">シリアルNo</th>
+                    <th className="border border-black min-w-[120px]">機器名称</th>
+                    <th className="border border-black min-w-[150px]">備考</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allRows.slice(0, 25).map((row, idx) => (
+                    <tr key={idx} className="row-h-24 border-b border-black text-center leading-none">
+                      <td className="border border-black font-mono">{idx + 1}</td>
+                      <td className="border border-black text-left px-2 truncate">{row.model}</td>
+                      <td className="border border-black col-e-cell px-1 font-mono font-semibold">{row.serial}</td>
+                      <td className="border border-black text-left px-2 truncate">{row.axis}</td>
+                      <td className="border border-black text-left px-2 whitespace-nowrap overflow-hidden text-ellipsis">{row.remarks}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-2 text-[10px] text-gray-500 flex justify-between items-center">
+              <span>QuickScan DB System Generated</span>
+              <span>Page 1 / 1</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // エラーキャッチ用コンポーネント
+    class ErrorBoundary extends React.Component {
+      constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+      }
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="p-6 text-red-400 font-mono text-sm">
+              <h1 className="text-xl font-bold text-red-500 mb-2">レンダリングエラーが発生しました</h1>
+              <p className="bg-black/50 p-4 rounded border border-red-500/40">{this.state.error?.toString()}</p>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    );
+  </script>
+</body>
+</html>
