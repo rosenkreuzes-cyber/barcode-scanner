@@ -254,8 +254,8 @@
   "version": "..."
 }`;
 
-      // gemini-2.5-flash に固定
-      const targetModel = 'gemini-2.5-flash';
+      // 最新モデル gemini-3.6-flash を指定
+      const targetModel = 'gemini-3.6-flash';
 
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${key}`, {
