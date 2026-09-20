@@ -254,8 +254,8 @@
   "version": "..."
 }`;
 
-      // 試行するモデル候補（優先度順）
-      const candidateModels = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+      // 画面に提示された最新の動作可能なモデルを優先的に試行
+      const candidateModels = ['gemini-2.5-flash', 'gemini-1.5-flash'];
       let lastErrorMsg = '';
 
       for (const model of candidateModels) {
@@ -276,9 +276,9 @@
           const data = await res.json();
 
           if (data.error) {
-            lastErrorMsg = data.error.message || 'モデル未対応';
+            lastErrorMsg = data.error.message || 'モデルエラー';
             console.warn(`モデル ${model} でエラー発生:`, lastErrorMsg);
-            continue; // 次のモデルでリトライ
+            continue; // 失敗時は次のモデルへ
           }
 
           const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -299,7 +299,7 @@
             document.getElementById('resSN').innerText = parsed.sn || '未検出';
             document.getElementById('resVer').innerText = revVal;
             document.getElementById('ocrStatus').innerText = `Status: 解析成功！ (${model})`;
-            return; // 成功したため終了
+            return;
           }
         } catch (err) {
           lastErrorMsg = err.message;
@@ -307,7 +307,6 @@
         }
       }
 
-      // 全モデルで失敗した場合の表示
       document.getElementById('ocrStatus').innerText = `Status: APIエラー (${lastErrorMsg})`;
     }
   </script>
