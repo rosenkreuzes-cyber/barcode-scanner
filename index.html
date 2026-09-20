@@ -71,21 +71,8 @@
       margin-top: 10px;
       cursor: pointer;
     }
-    .modal {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.95);
-      z-index: 1000;
-      flex-direction: column;
-      align-items: center;
-      justify-content: space-between;
-      padding: 20px;
-    }
-    #reader { width: 100%; max-width: 360px; background: #000; border-radius: 12px; overflow: hidden; }
     .hidden { display: none !important; }
 
-    /* A4 印刷設定 */
     @media print {
       body { background: white !important; color: black !important; }
       .no-print { display: none !important; }
@@ -187,7 +174,6 @@
     <button class="btn-main" onclick="goToStep(1)">次へ（ユニットスキャンへ）</button>
   </div>
 
-  <!-- JavaScript ロジック -->
   <script>
     // 初期化日付設定
     const today = new Date();
@@ -223,7 +209,9 @@
     let mediaStream = null;
     async function startOcrCam() {
       try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        mediaStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
+        });
         const video = document.getElementById('ocrVideo');
         video.srcObject = mediaStream;
         video.play();
@@ -233,7 +221,7 @@
         document.getElementById('btnCapture').classList.remove('hidden');
         document.getElementById('ocrStatus').innerText = 'Status: 撮影準備完了';
       } catch (e) {
-        alert('カメラの起動に失敗しました。');
+        alert('カメラの起動に失敗しました。パーミッションを確認してください。');
       }
     }
 
@@ -243,37 +231,78 @@
 
       const video = document.getElementById('ocrVideo');
       const canvas = document.getElementById('ocrCanvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
       canvas.getContext('2d').drawImage(video, 0, 0);
 
-      const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+      const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
       document.getElementById('ocrStatus').innerText = 'Status: AI解析中...';
 
+      // 抽出プロンプト（Rev判定ルールを追加）
+      const promptText = `添付された銘板・ラベル画像から以下の項目を抽出し、JSON形式で出力してください。
+
+1. "model": 製品型式 (例: JEPMC-BU3303N-E)
+2. "sn": S/Nまたはシリアル番号 (例: D02673039120017)
+3. "version": リビジョン・Rev情報。
+   【重要条件】文字列の先頭が "A" または "BO" (または "B0") で始まる箇所がRevに該当します。
+   例: "A03", "BO201.70", "BO201.10", "B0201.70" など。
+   見つからない場合は "未検出" としてください。
+
+必ず以下のJSONオブジェクト形式のみで返してください。
+{
+  "model": "...",
+  "sn": "...",
+  "version": "..."
+}`;
+
       try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{
               parts: [
-                { text: '画像銘板の model, sn, version をJSON形式で返してください。' },
+                { text: promptText },
                 { inline_data: { mime_type: 'image/jpeg', data: base64 } }
               ]
-            }],
-            generationConfig: { response_mime_type: 'application/json' }
+            }]
           })
         });
-        const data = await res.json();
-        const text = data.candidates[0].content.parts[0].text;
-        const parsed = JSON.parse(text);
 
-        document.getElementById('resModel').innerText = parsed.model || '未検出';
-        document.getElementById('resSN').innerText = parsed.sn || '未検出';
-        document.getElementById('resVer').innerText = parsed.version || '未検出';
-        document.getElementById('ocrStatus').innerText = 'Status: 解析完了';
+        const data = await res.json();
+
+        if (data.error) {
+          console.error(data.error);
+          document.getElementById('ocrStatus').innerText = `Status: APIエラー (${data.error.message || '通信失敗'})`;
+          return;
+        }
+
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+
+          // JS側のフォールバック処理（万が一AIが他を抽出した場合の正規表現フィルタリング）
+          let revVal = parsed.version || '未検出';
+          if (revVal === '未検出' || (!revVal.startsWith('A') && !revVal.startsWith('BO') && !revVal.startsWith('B0'))) {
+            const revMatch = rawText.match(/\b(A\d+|BO?\d+\.\d+)\b/i);
+            if (revMatch) {
+              revVal = revMatch[0];
+            }
+          }
+
+          document.getElementById('resModel').innerText = parsed.model || '未検出';
+          document.getElementById('resSN').innerText = parsed.sn || '未検出';
+          document.getElementById('resVer').innerText = revVal;
+          document.getElementById('ocrStatus').innerText = 'Status: 解析成功！';
+        } else {
+          document.getElementById('ocrStatus').innerText = 'Status: 解析失敗 (JSON抽出不能)';
+        }
+
       } catch (err) {
-        document.getElementById('ocrStatus').innerText = 'Status: 解析エラー';
+        console.error(err);
+        document.getElementById('ocrStatus').innerText = 'Status: 通信・解析エラー';
       }
     }
   </script>
