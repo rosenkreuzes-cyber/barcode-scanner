@@ -9,7 +9,6 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <style>
     @media print {
@@ -52,15 +51,10 @@
   </style>
 </head>
 <body class="bg-[#042219] text-[#E6DAA6] select-none text-base min-h-screen">
-  <div id="root">
-    <!-- 万が一JavaScriptが読み込まれなかった場合のセーフティ -->
-    <div className="p-5 text-center text-[#E6DAA6]">
-      <p className="text-lg font-bold mb-2">読み込み中...</p>
-      <p className="text-xs text-gray-400">画面が変わらない場合は、ページを再読み込みしてください。</p>
-    </div>
-  </div>
+  <div id="root"></div>
 
-  <script type="text/babel">
+  <script>
+    const e = React.createElement;
     const { useState, useEffect, useRef } = React;
 
     function App() {
@@ -95,13 +89,13 @@
           const year = today.getFullYear();
           const month = String(today.getMonth() + 1).padStart(2, '0');
           const day = String(today.getDate()).padStart(2, '0');
-          setHeaderInfo(prev => ({ ...prev, entryDate: `${year}/${month}/${day}` }));
+          setHeaderInfo(prev => Object.assign({}, prev, { entryDate: `${year}/${month}/${day}` }));
 
           const localKey = localStorage.getItem('GEMINI_API_KEY') || '';
           setSavedApiKey(localKey);
           setApiKeyInput(localKey);
-        } catch (e) {
-          console.error("Initialization error:", e);
+        } catch (err) {
+          console.error(err);
         }
       }, []);
 
@@ -112,12 +106,12 @@
           setSavedApiKey(trimmedKey);
           alert('APIキーを保存しました。');
         } catch (e) {
-          alert('キーの保存に失敗しました。');
+          alert('保存に失敗しました。');
         }
       };
 
-      const handleUppercaseChange = (field, value) => setHeaderInfo(prev => ({ ...prev, [field]: (value || '').toUpperCase() }));
-      const handleNumberChange = (field, value) => setHeaderInfo(prev => ({ ...prev, [field]: (value || '').replace(/[^0-9]/g, '') }));
+      const handleUppercaseChange = (field, value) => setHeaderInfo(prev => Object.assign({}, prev, { [field]: (value || '').toUpperCase() }));
+      const handleNumberChange = (field, value) => setHeaderInfo(prev => Object.assign({}, prev, { [field]: (value || '').replace(/[^0-9]/g, '') }));
 
       const [units, setUnits] = useState([
         { id: 'power', label: '電源ユニット', model: 'JPMC-PSD3012N', serial: '', remarks: '' },
@@ -134,7 +128,7 @@
 
       const handleClearData = () => {
         setHeaderInfo(prev => ({ docNo: '', modelName: '', entryDate: prev.entryDate, customer: '', unitNo: '', orderQty: '', elecStaff: '' }));
-        setUnits(units.map(u => ({ ...u, serial: '', remarks: '' })));
+        setUnits(units.map(u => Object.assign({}, u, { serial: '', remarks: '' })));
         setServoPacks([{ id: 'servo_1', label: '', model: '', serial: '', axis: '', remarks: '' }]);
         setCurrentStep(0);
         alert('入力データをクリアしました。');
@@ -168,7 +162,7 @@
           setOcrCameraActive(true);
           setOcrStatus('撮影準備完了');
         } catch (err) {
-          alert("カメラの起動に失敗しました。カメラパーミッションを確認してください。");
+          alert("カメラ起動に失敗しました。パーミッションを確認してください。");
         }
       };
 
