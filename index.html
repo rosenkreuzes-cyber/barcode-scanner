@@ -298,11 +298,6 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
         URL.revokeObjectURL(url);
       };
 
-      // ① 外部アプリ（Sharp Desktop Mobile等）へ直接接続
-      const handleExternalPrint = () => {
-        window.location.href = "sharpdesktopmobile://";
-      };
-
       // --- STEP 0: 初期画面 ---
       if (step === 0) {
         return (
@@ -519,6 +514,9 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
           return allItems[index] || { model: '', serial: '', title: '', remarks: '' };
         });
 
+        // Android用 Fallback Intent
+        const androidIntent = "intent://#Intent;scheme=sharpdeskmobile;package=jp.co.sharp.print.sharpdeskmobile;end";
+
         return (
           <div className="min-h-[100dvh] p-2 sm:p-4 max-w-4xl mx-auto w-full">
             {/* 操作ボタンエリア (非印刷) */}
@@ -528,10 +526,13 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                 <button onClick={handleSaveCSV} className="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm">
                   💾 CSV保存
                 </button>
-                {/* ① 外部印刷アプリへ直接連携 */}
-                <button onClick={handleExternalPrint} className="bg-[#F5D887] text-[#042219] font-bold px-4 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm">
-                  🖨️ 外部アプリ印刷
-                </button>
+                {/* 直接タップ起動用の <a> タグボタン */}
+                <a 
+                  href="sharpdeskmobile://" 
+                  className="bg-[#F5D887] text-[#042219] font-bold px-4 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm inline-block text-center shadow-md active:scale-95 transition-transform"
+                >
+                  🖨️ 外部アプリ起動
+                </a>
               </div>
             </div>
 
@@ -571,7 +572,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                   </tbody>
                 </table>
 
-                {/* 明細テーブル (機器名称列復活) */}
+                {/* 明細テーブル (機器名称列あり) */}
                 <table className="w-full text-xs border-collapse border border-black">
                   <thead>
                     <tr className="bg-gray-200 border-b border-black">
