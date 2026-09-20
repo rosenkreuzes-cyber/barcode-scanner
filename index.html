@@ -5,7 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#042219" />
   <title>QuickScan DB</title>
+  <!-- React & ReactDOM (CDN) -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Barcode Scanner Library -->
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -13,296 +21,650 @@
       color: #E6DAA6;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
     }
-    .container {
-      width: 100%;
-      max-width: 500px;
-      margin: 0 auto;
-      padding: 20px;
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
+    input, select, textarea {
+      color-scheme: dark;
     }
-    h1 { color: #F5D887; text-align: center; font-size: 26px; margin-bottom: 5px; }
-    p.sub { text-align: center; color: rgba(230, 218, 166, 0.7); font-size: 13px; margin-bottom: 20px; }
-    .card {
-      background: rgba(9, 51, 37, 0.6);
-      border: 1px solid rgba(230, 218, 166, 0.3);
-      border-radius: 16px;
-      padding: 16px;
-      margin-bottom: 15px;
-    }
-    .field { margin-bottom: 12px; }
-    .field label { display: block; font-size: 13px; margin-bottom: 4px; font-weight: bold; }
-    .field input {
-      width: 100%;
-      background: #093325;
-      border: 1px solid rgba(230, 218, 166, 0.4);
-      border-radius: 10px;
-      padding: 10px 12px;
-      color: #E6DAA6;
-      font-size: 15px;
-      text-transform: uppercase;
-    }
-    .field input:focus { outline: none; border-color: #F5D887; }
-    .btn-main {
-      width: 100%;
-      background: #F5D887;
-      color: #042219;
-      font-weight: bold;
-      padding: 14px;
-      border-radius: 30px;
-      border: none;
-      font-size: 16px;
-      cursor: pointer;
-      margin-top: 10px;
-    }
-    .btn-sub {
-      width: 100%;
-      background: transparent;
-      color: #ff6b6b;
-      border: 1px solid rgba(255,107,107,0.4);
-      padding: 10px;
-      border-radius: 10px;
-      font-size: 14px;
-      margin-top: 10px;
-      cursor: pointer;
-    }
-    .hidden { display: none !important; }
-
+    
+    /* 印刷用A4縦1ページスタイル */
     @media print {
-      body { background: white !important; color: black !important; }
-      .no-print { display: none !important; }
-      .print-area { display: block !important; width: 100% !important; padding: 0 !important; }
-      table { width: 100%; border-collapse: collapse; border: 1px solid black; }
-      th, td { border: 1px solid black; padding: 4px; font-size: 11px; text-align: center; }
-      @page { size: A4 portrait; margin: 10mm; }
+      body {
+        background: white !important;
+        color: black !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .print-area {
+        display: block !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
+      th, td {
+        border: 1px solid #000;
+        padding: 6px 8px;
+        font-size: 11px;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2 !important;
+        font-weight: bold;
+      }
+      @page {
+        size: A4 portrait;
+        margin: 12mm;
+      }
     }
   </style>
 </head>
 <body>
 
-  <!-- STEP 0: 基本情報入力 -->
-  <div id="step-0" class="container">
-    <div>
-      <h1>QuickScan DB</h1>
-      <p class="sub">基本情報の入力</p>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, createContext, useContext } = React;
+
+    // --- 1. APIキー管理 Context ---
+    const ApiKeyContext = createContext();
+
+    const ApiKeyProvider = ({ children }) => {
+      const [apiKey, setApiKey] = useState(() => localStorage.getItem('GEMINI_API_KEY') || '');
+
+      const saveApiKey = (key) => {
+        setApiKey(key);
+        localStorage.setItem('GEMINI_API_KEY', key);
+      };
+
+      return (
+        <ApiKeyContext.Provider value={{ apiKey, saveApiKey }}>
+          {children}
+        </ApiKeyContext.Provider>
+      );
+    };
+
+    const useApiKey = () => useContext(ApiKeyContext);
+
+    // --- 2. バーコード読み取り & 整合性検証コンポーネント (共通ロジック) ---
+    const BarcodeScannerModal = ({ isOpen, onClose, onScanSuccess, expectedModel }) => {
+      const [error, setError] = useState('');
+
+      useEffect(() => {
+        if (!isOpen) return;
+        let html5QrCode;
+
+        const startScanner = async () => {
+          try {
+            html5QrCode = new Html5Qrcode("reader");
+            await html5QrCode.start(
+              { facingMode: "environment" },
+              { fps: 10, qrbox: { width: 250, height: 150 } },
+              (decodedText) => {
+                // データの整合性検証ロジック
+                if (expectedModel && !decodedText.includes(expectedModel)) {
+                  setError(`検証エラー: 型式 (${expectedModel}) と一致しません。`);
+                  return;
+                }
+                setError('');
+                html5QrCode.stop().then(() => {
+                  onScanSuccess(decodedText);
+                  onClose();
+                });
+              },
+              (errorMessage) => { /* スキャン待機中 */ }
+            );
+          } catch (err) {
+            setError('カメラの起動に失敗しました。');
+          }
+        };
+
+        startScanner();
+
+        return () => {
+          if (html5QrCode && html5QrCode.isScanning) {
+            html5QrCode.stop().catch(console.error);
+          }
+        };
+      }, [isOpen]);
+
+      if (!isOpen) return null;
+
+      return (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 no-print">
+          <div className="bg-[#093325] border border-[#E6DAA6]/40 p-4 rounded-xl w-full max-w-sm text-center">
+            <h3 className="font-bold text-lg text-[#F5D887] mb-2">バーコードスキャン</h3>
+            <div id="reader" className="w-full h-48 bg-black rounded-lg overflow-hidden mb-2"></div>
+            {error && <p className="text-red-400 text-xs mb-2 font-bold">{error}</p>}
+            <button
+              onClick={onClose}
+              className="mt-2 w-full bg-red-500/20 text-red-300 border border-red-500/40 py-2 rounded-lg text-sm"
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    // --- 3. メインアプリケーション ---
+    function MainApp() {
+      const { apiKey, saveApiKey } = useApiKey();
+      const [inputKey, setInputKey] = useState(apiKey);
       
-      <div class="card">
-        <div class="field">
-          <label>製造指図書No</label>
-          <input type="text" id="docNo" placeholder="例: ORD-2026-X">
-        </div>
-        <div class="field">
-          <label>機種名</label>
-          <input type="text" id="modelName" placeholder="例: MODEL-A100">
-        </div>
-        <div class="field">
-          <label>記入日</label>
-          <input type="text" id="entryDate" readonly style="opacity:0.7;">
-        </div>
-        <div class="field">
-          <label>客先名</label>
-          <input type="text" id="customer" placeholder="例: TANAKA CORP">
-        </div>
-        <div style="display: flex; gap: 10px;">
-          <div class="field" style="flex: 1;">
-            <label>号機NO.</label>
-            <input type="number" id="unitNo" placeholder="数字">
-          </div>
-          <div class="field" style="flex: 1;">
-            <label>発注台数</label>
-            <input type="number" id="orderQty" placeholder="数字">
-          </div>
-        </div>
-        <div class="field">
-          <label>エレキ担当者</label>
-          <input type="text" id="elecStaff" placeholder="例: YAMADA">
-        </div>
-      </div>
-    </div>
-
-    <div>
-      <button class="btn-main" onclick="goToStep(0.5)">次へ（AI OCR テストへ）</button>
-      <button class="btn-sub" onclick="clearData()">入力情報をクリア</button>
-    </div>
-  </div>
-
-  <!-- STEP 0.5: AI OCR -->
-  <div id="step-05" class="container hidden">
-    <div>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-        <button style="color:#E6DAA6; background:none; border:none; cursor:pointer;" onclick="goToStep(0)">← 戻る</button>
-        <span style="font-size:12px; color:#00ffcc; border:1px solid #00ffcc; padding:2px 8px; border-radius:10px;">AI OCR MODE</span>
-      </div>
-      <h1>AI (Gemini) OCR</h1>
-      <p class="sub">銘板画像からの自動読取テスト</p>
-
-      <div class="card">
-        <label style="font-size:12px; display:block; margin-bottom:5px;">🔑 API Key 設定</label>
-        <div style="display:flex; gap:5px;">
-          <input type="password" id="apiKeyInput" placeholder="AIzaSy..." style="flex:1; background:#000; color:#fff; border:1px solid #555; padding:6px; border-radius:6px; font-size:12px;">
-          <button onclick="saveKey()" style="background:#F5D887; color:#042219; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; cursor:pointer;">保存</button>
-        </div>
-      </div>
-
-      <div class="card" style="text-align:center;">
-        <video id="ocrVideo" playsinline muted style="width:100%; height:180px; background:#000; border-radius:8px; object-fit:cover;" class="hidden"></video>
-        <canvas id="ocrCanvas" class="hidden"></canvas>
-        <div id="videoPlaceholder" style="height:120px; display:flex; align-items:center; justify-content:center; color:#888; font-size:12px;">カメラ停止中</div>
-        
-        <div style="display:flex; gap:8px; margin-top:10px;">
-          <button id="btnStartCam" onclick="startOcrCam()" style="flex:1; background:#093325; color:#00ffcc; border:1px solid #00ffcc; padding:10px; border-radius:8px; font-weight:bold; cursor:pointer;">📷 カメラ起動</button>
-          <button id="btnCapture" onclick="captureOcr()" class="hidden" style="flex:1; background:#F5D887; color:#042219; border:none; padding:10px; border-radius:8px; font-weight:bold; cursor:pointer;">☁️ 撮影&解析</button>
-        </div>
-        <div id="ocrStatus" style="font-size:12px; color:#00ffcc; margin-top:8px;">Status: 待機中</div>
-      </div>
-
-      <div class="card">
-        <div style="font-size:13px; font-weight:bold; color:#F5D887; margin-bottom:8px;">🔍 解析結果</div>
-        <div style="font-size:13px; line-height:1.8;">
-          <div>型式: <span id="resModel" style="color:#00ffcc; font-weight:bold;">-</span></div>
-          <div>S/N: <span id="resSN" style="color:#00ffcc; font-weight:bold;">-</span></div>
-          <div>Rev: <span id="resVer" style="color:#00ffcc; font-weight:bold;">-</span></div>
-        </div>
-      </div>
-    </div>
-
-    <button class="btn-main" onclick="goToStep(1)">次へ（ユニットスキャンへ）</button>
-  </div>
-
-  <script>
-    // 初期化日付設定
-    const today = new Date();
-    document.getElementById('entryDate').value = today.getFullYear() + '/' + String(today.getMonth() + 1).padStart(2, '0') + '/' + String(today.getDate()).padStart(2, '0');
-
-    // API Key ローカルストレージ復元
-    const savedKey = localStorage.getItem('GEMINI_API_KEY') || '';
-    document.getElementById('apiKeyInput').value = savedKey;
-
-    function saveKey() {
-      const val = document.getElementById('apiKeyInput').value.trim();
-      localStorage.setItem('GEMINI_API_KEY', val);
-      alert('APIキーを保存しました');
-    }
-
-    // 画面遷移切り替え
-    function goToStep(step) {
-      document.getElementById('step-0').classList.add('hidden');
-      document.getElementById('step-05').classList.add('hidden');
-
-      if (step === 0) document.getElementById('step-0').classList.remove('hidden');
-      if (step === 0.5) document.getElementById('step-05').classList.remove('hidden');
-      if (step === 1) alert('これより先のスキャン機能へ移ります。');
-    }
-
-    function clearData() {
-      document.querySelectorAll('#step-0 input').forEach(input => {
-        if (input.id !== 'entryDate') input.value = '';
+      // 基本情報
+      const [baseInfo, setBaseInfo] = useState({
+        docNo: '',
+        modelName: '',
+        entryDate: new Date().toISOString().split('T')[0].replace(/-/g, '/'),
+        customer: '',
+        unitNo: '',
+        orderQty: '',
+        elecStaff: ''
       });
-    }
 
-    // AI OCR カメラ機能
-    let mediaStream = null;
-    async function startOcrCam() {
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
-        });
-        const video = document.getElementById('ocrVideo');
-        video.srcObject = mediaStream;
-        video.play();
-        video.classList.remove('hidden');
-        document.getElementById('videoPlaceholder').classList.add('hidden');
-        document.getElementById('btnStartCam').classList.add('hidden');
-        document.getElementById('btnCapture').classList.remove('hidden');
-        document.getElementById('ocrStatus').innerText = 'Status: 撮影準備完了';
-      } catch (e) {
-        alert('カメラの起動に失敗しました。パーミッションを確認してください。');
-      }
-    }
+      // 4つの共通ユニット画面（独立タイトル）
+      const [fixedUnits, setFixedUnits] = useState([
+        { id: 'power', title: '電源ユニット', model: 'JPMC-PSD3012N', serial: '', axis: '電源', remarks: '' },
+        { id: 'cpu', title: 'CPU', model: 'JPMC-CP3202N-E', serial: '', axis: 'CPU軸', remarks: '' },
+        { id: 'base', title: 'ベースユニット', model: 'JPMC-BUB3008N-E', serial: '', axis: 'ベース', remarks: '' },
+        { id: 'lio', title: 'LIO-04', model: 'JPMC-IO2303-E', serial: '', axis: 'LIO軸', remarks: '' }
+      ]);
 
-    async function captureOcr() {
-      const key = localStorage.getItem('GEMINI_API_KEY');
-      if (!key) { alert('APIキーを設定してください'); return; }
+      // サーボパック画面（複数可変）
+      const [servoPacks, setServoPacks] = useState([
+        { id: 'servo_1', title: 'サーボパック 1', model: 'SGD7S-1R6A00A', serial: '', axis: '1軸', remarks: '' }
+      ]);
 
-      const video = document.getElementById('ocrVideo');
-      const canvas = document.getElementById('ocrCanvas');
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
-      canvas.getContext('2d').drawImage(video, 0, 0);
+      // 画面制御: 0 = 初期画面, 1~4 = 4ユニット, 5+ = サーボパック群, 999 = 印刷結果
+      const [step, setStep] = useState(0);
+      const [scannerConfig, setScannerConfig] = useState({ isOpen: false, targetField: null, expectedModel: '' });
 
-      const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-      document.getElementById('ocrStatus').innerText = 'Status: AI解析中...';
-
-      const promptText = `添付された銘板・ラベル画像から以下の項目を抽出し、JSON形式で出力してください。
-
-1. "model": 製品型式 (例: JEPMC-BU3303N-E)
-2. "sn": S/Nまたはシリアル番号 (例: D02673039120017)
-3. "version": リビジョン・Rev情報。
-   【重要条件】文字列の先頭が "A" または "BO" (または "B0") で始まる箇所がRevに該当します。
-   例: "A03", "BO201.70", "BO201.10", "B0201.70" など。
-   見つからない場合は "未検出" としてください。
-
-必ず以下のJSONオブジェクト形式のみで返してください。
-{
-  "model": "...",
-  "sn": "...",
-  "version": "..."
-}`;
-
-      // 最新モデル gemini-3.6-flash を指定
-      const targetModel = 'gemini-3.6-flash';
-
-      try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${key}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: promptText },
-                { inline_data: { mime_type: 'image/jpeg', data: base64 } }
-              ]
-            }]
-          })
-        });
-
-        const data = await res.json();
-
-        if (data.error) {
-          document.getElementById('ocrStatus').innerText = `Status: APIエラー (${data.error.message})`;
+      // ガード処理付き画面遷移
+      const handleNextFromHome = () => {
+        if (!apiKey.trim()) {
+          alert('APIキーを設定してください（初期画面で保存する必要があります）。');
           return;
         }
+        setStep(1);
+      };
 
-        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-
-          let revVal = parsed.version || '未検出';
-          if (revVal === '未検出' || (!revVal.startsWith('A') && !revVal.startsWith('BO') && !revVal.startsWith('B0'))) {
-            const revMatch = rawText.match(/\b(A\d+|BO?\d+\.\d+)\b/i);
-            if (revMatch) {
-              revVal = revMatch[0];
-            }
-          }
-
-          document.getElementById('resModel').innerText = parsed.model || '未検出';
-          document.getElementById('resSN').innerText = parsed.sn || '未検出';
-          document.getElementById('resVer').innerText = revVal;
-          document.getElementById('ocrStatus').innerText = 'Status: 解析成功！';
-        } else {
-          document.getElementById('ocrStatus').innerText = 'Status: 解析失敗 (データ抽出不可)';
+      const handleSaveKey = () => {
+        if (!inputKey.trim()) {
+          alert('有効なAPIキーを入力してください。');
+          return;
         }
-      } catch (err) {
-        document.getElementById('ocrStatus').innerText = `Status: 通信エラー (${err.message})`;
+        saveApiKey(inputKey.trim());
+        alert('APIキーを保存・有効化しました。');
+      };
+
+      // クリア処理
+      const handleClear = () => {
+        setBaseInfo({
+          docNo: '', modelName: '',
+          entryDate: new Date().toISOString().split('T')[0].replace(/-/g, '/'),
+          customer: '', unitNo: '', orderQty: '', elecStaff: ''
+        });
+        setFixedUnits(fixedUnits.map(u => ({ ...u, serial: '', remarks: '' })));
+        setServoPacks([{ id: 'servo_1', title: 'サーボパック 1', model: 'SGD7S-1R6A00A', serial: '', axis: '1軸', remarks: '' }]);
+        setStep(0);
+        alert('入力情報をクリアしました。');
+      };
+
+      // サーボパック追加・削除
+      const handleAddServo = () => {
+        const nextIndex = servoPacks.length + 1;
+        setServoPacks([
+          ...servoPacks,
+          {
+            id: `servo_${Date.now()}`,
+            title: `サーボパック ${nextIndex}`,
+            model: 'SGD7S-1R6A00A',
+            serial: '',
+            axis: `${nextIndex}軸`,
+            remarks: ''
+          }
+        ]);
+      };
+
+      const handleRemoveServo = (index) => {
+        if (servoPacks.length <= 1) return;
+        setServoPacks(servoPacks.filter((_, i) => i !== index));
+      };
+
+      // スキャナー起動ハンドラ
+      const openScanner = (type, index, expectedModel) => {
+        setScannerConfig({ isOpen: true, type, index, expectedModel });
+      };
+
+      const handleScanSuccess = (scannedText) => {
+        const { type, index } = scannerConfig;
+        if (type === 'fixed') {
+          const updated = [...fixedUnits];
+          updated[index].serial = scannedText;
+          setFixedUnits(updated);
+        } else if (type === 'servo') {
+          const updated = [...servoPacks];
+          updated[index].serial = scannedText;
+          setServoPacks(updated);
+        }
+      };
+
+      // --- STEP 0: 初期画面 (APIキー設定・基本情報・ガード) ---
+      if (step === 0) {
+        return (
+          <div className="min-h-screen p-4 flex flex-col justify-between max-w-md mx-auto">
+            <div>
+              <h1 className="text-2xl font-bold text-center text-[#F5D887] mt-4 mb-1">QuickScan DB</h1>
+              <p className="text-xs text-center text-[#E6DAA6]/70 mb-6">基本情報 & システム設定</p>
+
+              {/* APIキー入力フォーム (初期画面に集約) */}
+              <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl mb-4">
+                <label className="block text-xs font-bold text-[#F5D887] mb-1">🔑 APIキー設定 (必須)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={inputKey}
+                    onChange={(e) => setInputKey(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="flex-1 bg-[#042219] border border-[#E6DAA6]/40 rounded-lg px-3 py-2 text-sm"
+                  />
+                  <button
+                    onClick={handleSaveKey}
+                    className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2 rounded-lg text-sm"
+                  >
+                    保存
+                  </button>
+                </div>
+                {!apiKey && <p className="text-red-400 text-[11px] mt-1">※ 各読み取り画面へ遷移するにはAPIキーが必要です</p>}
+              </div>
+
+              {/* 基本情報入力フォーム */}
+              <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3">
+                <div>
+                  <label className="block text-xs font-bold mb-1">製造指図書No</label>
+                  <input
+                    type="text" value={baseInfo.docNo}
+                    onChange={(e) => setBaseInfo({...baseInfo, docNo: e.target.value})}
+                    placeholder="例: ORD-2026-X"
+                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">機種名</label>
+                  <input
+                    type="text" value={baseInfo.modelName}
+                    onChange={(e) => setBaseInfo({...baseInfo, modelName: e.target.value})}
+                    placeholder="例: MODEL-A100"
+                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-xs font-bold mb-1">記入日</label>
+                    <input type="text" value={baseInfo.entryDate} readOnly className="w-full bg-[#042219]/50 border border-[#E6DAA6]/20 rounded-lg px-3 py-2 text-sm opacity-70" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs font-bold mb-1">客先名</label>
+                    <input
+                      type="text" value={baseInfo.customer}
+                      onChange={(e) => setBaseInfo({...baseInfo, customer: e.target.value})}
+                      placeholder="例: TANAKA CORP"
+                      className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-xs font-bold mb-1">号機NO.</label>
+                    <input
+                      type="number" value={baseInfo.unitNo}
+                      onChange={(e) => setBaseInfo({...baseInfo, unitNo: e.target.value})}
+                      placeholder="1"
+                      className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs font-bold mb-1">発注台数</label>
+                    <input
+                      type="number" value={baseInfo.orderQty}
+                      onChange={(e) => setBaseInfo({...baseInfo, orderQty: e.target.value})}
+                      placeholder="1"
+                      className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1">エレキ担当者</label>
+                  <input
+                    type="text" value={baseInfo.elecStaff}
+                    onChange={(e) => setBaseInfo({...baseInfo, elecStaff: e.target.value})}
+                    placeholder="例: YAMADA"
+                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="my-6 space-y-2">
+              <button
+                onClick={handleNextFromHome}
+                className="w-full bg-[#F5D887] text-[#042219] font-bold py-3.5 rounded-full text-base shadow-lg"
+              >
+                スキャン・入力を開始 (電源ユニットへ)
+              </button>
+              <button
+                onClick={handleClear}
+                className="w-full border border-red-500/40 text-red-400 py-2.5 rounded-lg text-sm"
+              >
+                入力情報をクリア
+              </button>
+            </div>
+          </div>
+        );
       }
+
+      // --- STEP 1~4: 固定ユニット4画面 (電源ユニット / CPU / ベースユニット / LIO-04) ---
+      if (step >= 1 && step <= 4) {
+        const uIndex = step - 1;
+        const current = fixedUnits[uIndex];
+
+        return (
+          <div className="min-h-screen p-4 flex flex-col justify-between max-w-md mx-auto">
+            <div>
+              <div className="flex justify-between items-center text-sm mb-4">
+                <button onClick={() => setStep(step - 1)} className="text-[#E6DAA6]/80">← 前へ</button>
+                <span className="text-xs font-mono">{step} / {4 + servoPacks.length}</span>
+              </div>
+
+              <div className="text-center mb-6">
+                <h2 className="text-xl font-bold text-[#F5D887]">{current.title} 画面</h2>
+                <p className="text-xs text-[#E6DAA6]/60">バーコード読み取り & 検証</p>
+              </div>
+
+              <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-4">
+                <div>
+                  <label className="block text-xs mb-1">製品型式 (照合対象)</label>
+                  <input type="text" value={current.model} readOnly className="w-full bg-[#042219]/60 border border-[#E6DAA6]/20 rounded-lg px-3 py-2 text-sm font-mono" />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1">シリアルNo</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={current.serial}
+                      onChange={(e) => {
+                        const updated = [...fixedUnits];
+                        updated[uIndex].serial = e.target.value;
+                        setFixedUnits(updated);
+                      }}
+                      placeholder="バーコード読み取りまたは入力"
+                      className="flex-1 bg-[#042219] border border-[#E6DAA6]/40 rounded-lg px-3 py-2 text-sm font-mono"
+                    />
+                    <button
+                      onClick={() => openScanner('fixed', uIndex, current.model)}
+                      className="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold rounded-lg px-3 py-2 text-sm"
+                    >
+                      📷 スキャン
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs mb-1">備考</label>
+                  <input
+                    type="text"
+                    value={current.remarks}
+                    onChange={(e) => {
+                      const updated = [...fixedUnits];
+                      updated[uIndex].remarks = e.target.value;
+                      setFixedUnits(updated);
+                    }}
+                    placeholder="メモなど"
+                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="my-6">
+              <button
+                onClick={() => setStep(step + 1)}
+                className="w-full bg-[#F5D887] text-[#042219] font-bold py-3.5 rounded-full text-base"
+              >
+                次へ ({step === 4 ? 'サーボパック 1' : fixedUnits[uIndex + 1].title}へ)
+              </button>
+            </div>
+
+            <BarcodeScannerModal
+              isOpen={scannerConfig.isOpen}
+              onClose={() => setScannerConfig({ ...scannerConfig, isOpen: false })}
+              onScanSuccess={handleScanSuccess}
+              expectedModel={scannerConfig.expectedModel}
+            />
+          </div>
+        );
+      }
+
+      // --- STEP 5+: サーボパック画面群 ---
+      if (step >= 5 && step < 999) {
+        const sIndex = step - 5;
+        const current = servoPacks[sIndex];
+
+        return (
+          <div className="min-h-screen p-4 flex flex-col justify-between max-w-md mx-auto">
+            <div>
+              <div className="flex justify-between items-center text-sm mb-4">
+                <button onClick={() => setStep(step - 1)} className="text-[#E6DAA6]/80">← 前へ</button>
+                <span className="text-xs font-mono">{step} / {4 + servoPacks.length}</span>
+              </div>
+
+              <div className="text-center mb-6">
+                <h2 className="text-xl font-bold text-[#F5D887]">{current.title} 画面</h2>
+                <p className="text-xs text-[#E6DAA6]/60">サーボパック読み取り・追加</p>
+              </div>
+
+              <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-4">
+                <div>
+                  <label className="block text-xs mb-1">型式</label>
+                  <input
+                    type="text"
+                    value={current.model}
+                    onChange={(e) => {
+                      const updated = [...servoPacks];
+                      updated[sIndex].model = e.target.value;
+                      setServoPacks(updated);
+                    }}
+                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-lg px-3 py-2 text-sm font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1">シリアルNo</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={current.serial}
+                      onChange={(e) => {
+                        const updated = [...servoPacks];
+                        updated[sIndex].serial = e.target.value;
+                        setServoPacks(updated);
+                      }}
+                      placeholder="バーコード読み取りまたは入力"
+                      className="flex-1 bg-[#042219] border border-[#E6DAA6]/40 rounded-lg px-3 py-2 text-sm font-mono"
+                    />
+                    <button
+                      onClick={() => openScanner('servo', sIndex, current.model)}
+                      className="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold rounded-lg px-3 py-2 text-sm"
+                    >
+                      📷 スキャン
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs mb-1">軸名称</label>
+                  <input
+                    type="text"
+                    value={current.axis}
+                    onChange={(e) => {
+                      const updated = [...servoPacks];
+                      updated[sIndex].axis = e.target.value;
+                      setServoPacks(updated);
+                    }}
+                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* 機器追加ボタン & 削除ボタン */}
+              <div className="mt-4 space-y-2">
+                <button
+                  onClick={handleAddServo}
+                  className="w-full border border-dashed border-[#F5D887] text-[#F5D887] py-2.5 rounded-xl text-sm font-bold bg-[#F5D887]/10"
+                >
+                  ＋ 機器追加（次のサーボパックを追加）
+                </button>
+                {servoPacks.length > 1 && (
+                  <button
+                    onClick={() => handleRemoveServo(sIndex)}
+                    className="w-full border border-red-500/40 text-red-400 py-2 rounded-lg text-xs"
+                  >
+                    このサーボパックを削除
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 追加ボタンの下に「入力結果へ」ボタン */}
+            <div className="my-6 space-y-2">
+              {sIndex < servoPacks.length - 1 && (
+                <button
+                  onClick={() => setStep(step + 1)}
+                  className="w-full bg-[#093325] border border-[#E6DAA6] text-[#E6DAA6] py-3 rounded-full text-sm font-bold"
+                >
+                  次のサーボパック画面へ
+                </button>
+              )}
+              <button
+                onClick={() => setStep(999)}
+                className="w-full bg-[#F5D887] text-[#042219] font-bold py-3.5 rounded-full text-base"
+              >
+                入力結果へ (印刷プレビュー表示)
+              </button>
+            </div>
+
+            <BarcodeScannerModal
+              isOpen={scannerConfig.isOpen}
+              onClose={() => setScannerConfig({ ...scannerConfig, isOpen: false })}
+              onScanSuccess={handleScanSuccess}
+              expectedModel={scannerConfig.expectedModel}
+            />
+          </div>
+        );
+      }
+
+      // --- STEP 999: 入力結果 & A4縦 1ページ印刷画面 ---
+      if (step === 999) {
+        return (
+          <div className="min-h-screen p-4 max-w-2xl mx-auto">
+            <div className="no-print flex justify-between items-center mb-6">
+              <button onClick={() => setStep(4 + servoPacks.length)} className="text-[#E6DAA6]">← 修正に戻る</button>
+              <button
+                onClick={() => window.print()}
+                className="bg-[#F5D887] text-[#042219] font-bold px-6 py-2 rounded-full text-sm"
+              >
+                🖨️ A4印刷 / PDF保存
+              </button>
+            </div>
+
+            {/* A4 印刷領域 */}
+            <div className="print-area bg-white text-black p-6 rounded-lg shadow-xl text-xs">
+              <h1 className="text-center font-bold text-lg mb-4 underline">機器構成・構成部品チェックシート</h1>
+
+              <table className="mb-4">
+                <tbody>
+                  <tr>
+                    <th>製造指図書No</th>
+                    <td>{baseInfo.docNo || '-'}</td>
+                    <th>機種名</th>
+                    <td>{baseInfo.modelName || '-'}</td>
+                  </tr>
+                  <tr>
+                    <th>記入日</th>
+                    <td>{baseInfo.entryDate || '-'}</td>
+                    <th>客先名</th>
+                    <td>{baseInfo.customer || '-'}</td>
+                  </tr>
+                  <tr>
+                    <th>号機NO. / 発注台数</th>
+                    <td>{baseInfo.unitNo || '1'} / {baseInfo.orderQty || '1'}</td>
+                    <th>エレキ担当者</th>
+                    <td>{baseInfo.elecStaff || '-'}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h2 className="font-bold text-sm mb-1 mt-4 border-b border-black pb-1">■ 共通基本ユニット</h2>
+              <table className="mb-4">
+                <thead>
+                  <tr>
+                    <th style={{ width: '25%' }}>ユニット名</th>
+                    <th style={{ width: '35%' }}>型式</th>
+                    <th style={{ width: '40%' }}>シリアルNo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fixedUnits.map(item => (
+                    <tr key={item.id}>
+                      <td className="font-bold">{item.title}</td>
+                      <td>{item.model}</td>
+                      <td className="font-mono">{item.serial || '(未読み取り)'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <h2 className="font-bold text-sm mb-1 mt-4 border-b border-black pb-1">■ サーボパック</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: '15%' }}>軸名称</th>
+                    <th style={{ width: '25%' }}>ユニット名</th>
+                    <th style={{ width: '30%' }}>型式</th>
+                    <th style={{ width: '30%' }}>シリアルNo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {servoPacks.map((item, idx) => (
+                    <tr key={item.id}>
+                      <td>{item.axis || `${idx + 1}軸`}</td>
+                      <td>{item.title}</td>
+                      <td>{item.model}</td>
+                      <td className="font-mono">{item.serial || '(未読み取り)'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      }
+
+      return null;
     }
+
+    // App エントリーポイント
+    function App() {
+      return (
+        <ApiKeyProvider>
+          <MainApp />
+        </ApiKeyProvider>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
