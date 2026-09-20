@@ -238,7 +238,7 @@
       const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
       document.getElementById('ocrStatus').innerText = 'Status: AI解析中...';
 
-      // 抽出プロンプト（Rev判定ルールを追加）
+      // 抽出プロンプト（Rev判定ルール適用）
       const promptText = `添付された銘板・ラベル画像から以下の項目を抽出し、JSON形式で出力してください。
 
 1. "model": 製品型式 (例: JEPMC-BU3303N-E)
@@ -256,7 +256,8 @@
 }`;
 
       try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+        // gemini-2.5-flash エンドポイントを指定
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -283,7 +284,7 @@
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
 
-          // JS側のフォールバック処理（万が一AIが他を抽出した場合の正規表現フィルタリング）
+          // JS側のフォールバック処理
           let revVal = parsed.version || '未検出';
           if (revVal === '未検出' || (!revVal.startsWith('A') && !revVal.startsWith('BO') && !revVal.startsWith('B0'))) {
             const revMatch = rawText.match(/\b(A\d+|BO?\d+\.\d+)\b/i);
