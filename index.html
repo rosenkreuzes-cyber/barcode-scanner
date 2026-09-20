@@ -7,9 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>QuickScan DB</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <style>
     @media print {
@@ -51,8 +51,14 @@
     }
   </style>
 </head>
-<body class="bg-[#042219] text-[#E6DAA6] select-none text-base">
-  <div id="root"></div>
+<body class="bg-[#042219] text-[#E6DAA6] select-none text-base min-h-screen">
+  <div id="root">
+    <!-- 万が一JavaScriptが読み込まれなかった場合のセーフティ -->
+    <div className="p-5 text-center text-[#E6DAA6]">
+      <p className="text-lg font-bold mb-2">読み込み中...</p>
+      <p className="text-xs text-gray-400">画面が変わらない場合は、ページを再読み込みしてください。</p>
+    </div>
+  </div>
 
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
@@ -76,7 +82,6 @@
       const [ocrRawText, setOcrRawText] = useState('');
       const [ocrResult, setOcrResult] = useState({ model: '', sn: '', version: '' });
 
-      // APIキー管理（ブラウザローカルストレージ）
       const [apiKeyInput, setApiKeyInput] = useState('');
       const [savedApiKey, setSavedApiKey] = useState('');
 
@@ -85,27 +90,34 @@
       const streamRef = useRef(null);
 
       useEffect(() => {
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
-        setHeaderInfo(prev => ({ ...prev, entryDate: `${year}/${month}/${day}` }));
+        try {
+          const today = new Date();
+          const year = today.getFullYear();
+          const month = String(today.getMonth() + 1).padStart(2, '0');
+          const day = String(today.getDate()).padStart(2, '0');
+          setHeaderInfo(prev => ({ ...prev, entryDate: `${year}/${month}/${day}` }));
 
-        // ブラウザに保存されたAPIキーを取得
-        const localKey = localStorage.getItem('GEMINI_API_KEY') || '';
-        setSavedApiKey(localKey);
-        setApiKeyInput(localKey);
+          const localKey = localStorage.getItem('GEMINI_API_KEY') || '';
+          setSavedApiKey(localKey);
+          setApiKeyInput(localKey);
+        } catch (e) {
+          console.error("Initialization error:", e);
+        }
       }, []);
 
       const saveApiKeyToStorage = (key) => {
-        const trimmedKey = key.trim();
-        localStorage.setItem('GEMINI_API_KEY', trimmedKey);
-        setSavedApiKey(trimmedKey);
-        alert('APIキーをブラウザに保存しました。');
+        const trimmedKey = (key || '').trim();
+        try {
+          localStorage.setItem('GEMINI_API_KEY', trimmedKey);
+          setSavedApiKey(trimmedKey);
+          alert('APIキーを保存しました。');
+        } catch (e) {
+          alert('キーの保存に失敗しました。');
+        }
       };
 
-      const handleUppercaseChange = (field, value) => setHeaderInfo(prev => ({ ...prev, [field]: value.toUpperCase() }));
-      const handleNumberChange = (field, value) => setHeaderInfo(prev => ({ ...prev, [field]: value.replace(/[^0-9]/g, '') }));
+      const handleUppercaseChange = (field, value) => setHeaderInfo(prev => ({ ...prev, [field]: (value || '').toUpperCase() }));
+      const handleNumberChange = (field, value) => setHeaderInfo(prev => ({ ...prev, [field]: (value || '').replace(/[^0-9]/g, '') }));
 
       const [units, setUnits] = useState([
         { id: 'power', label: '電源ユニット', model: 'JPMC-PSD3012N', serial: '', remarks: '' },
@@ -156,7 +168,7 @@
           setOcrCameraActive(true);
           setOcrStatus('撮影準備完了');
         } catch (err) {
-          alert("カメラの起動に失敗しました。アクセス権限を確認してください。");
+          alert("カメラの起動に失敗しました。カメラパーミッションを確認してください。");
         }
       };
 
@@ -185,25 +197,24 @@
         setOcrLoading(true);
         setOcrStatus('AI解析中...');
 
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        canvas.width = video.videoWidth || 1280;
-        canvas.height = video.videoHeight || 720;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        try {
+          const video = videoRef.current;
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext('2d');
+          canvas.width = video.videoWidth || 1280;
+          canvas.height = video.videoHeight || 720;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        const base64Data = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+          const base64Data = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
 
-        const promptText = `この画像は製品ラベル・銘板です。画像に映っている文字を解析し、以下のキーを持つJSON形式で出力してください。
+          const promptText = `この画像は製品ラベル・銘板です。画像に映っている文字を解析し、以下のキーを持つJSON形式で出力してください。
 
-- "model": 製品型式（例: JEPMC-BU3303N-E, SGDXS-2R8A40A など）
-- "sn": シリアル番号（"S/N:" や "SER NO:" の後ろの英数字）
-- "version": バージョン・製造年月（例: AO3, 2026.07 など。なければ空文字）
+- "model": 製品型式
+- "sn": シリアル番号
+- "version": バージョン・製造年月（なければ空文字）
 
 見つからない項目は "未検出" としてください。`;
 
-        try {
-          // モデル指定を最新に修正
           const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${activeKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -221,10 +232,8 @@
           });
 
           const data = await response.json();
-          console.log("Gemini Raw API Response:", data);
 
           if (data.error) {
-            console.error("API Error:", data.error);
             setOcrStatus(`APIエラー: ${data.error.message || '通信失敗'}`);
             if (data.error.code === 400 || data.error.status === 'UNAUTHENTICATED') {
               localStorage.removeItem('GEMINI_API_KEY');
