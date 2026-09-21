@@ -1,628 +1,703 @@
 <!DOCTYPE html>
-<html lang="ja" class="h-full">
+<html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB</title>
-  <!-- React & ReactDOM (CDN) -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Tailwind CSS -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>QuickScan DB (OCR Version)</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- OCR (Tesseract.js) ライブラリ -->
+  <script src="https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
 
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    
-    html, body, #root {
-      width: 100%;
-      height: 100%;
-      min-height: 100dvh;
-      background-color: #042219;
-      color: #E6DAA6;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      overflow-x: hidden;
-    }
-
-    input, select, textarea {
-      color-scheme: dark;
-    }
-
-    /* 画面いっぱいに広げるコンテナ設定 */
-    .app-container {
-      min-height: 100dvh;
-      height: 100dvh;
-      padding-bottom: max(1rem, env(safe-area-inset-bottom));
-      padding-top: max(0.5rem, env(safe-area-inset-top));
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* 印刷用A4縦1ページスタイル */
+    /* A4 縦サイズ 1ページ印刷用CSS（OS差異を問わず一律適用） */
     @media print {
-      body {
-        background: white !important;
+      html, body {
+        height: 100%;
+        overflow: hidden !important;
+        background-color: white !important;
         color: black !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
       .no-print {
         display: none !important;
       }
       .print-area {
-        display: block !important;
         width: 100% !important;
+        max-width: none !important;
         margin: 0 !important;
-        padding: 0 !important;
+        padding: 6mm 8mm !important;
+        box-shadow: none !important;
+        border: none !important;
+        page-break-after: avoid !important;
+        page-break-inside: avoid !important;
       }
-      table {
-        width: 100%;
-        border-collapse: collapse;
+      .table-container {
+        overflow-x: visible !important;
       }
-      th, td {
-        border: 1px solid #000 !important;
-        padding: 4px 6px;
-        font-size: 11px !important;
-        text-align: left;
-      }
-      th {
-        background-color: #f2f2f2 !important;
-        font-weight: bold;
+      .preview-table {
+        min-width: 100% !important;
+        width: 100% !important;
       }
       @page {
         size: A4 portrait;
-        margin: 10mm;
+        margin: 0;
       }
+    }
+
+    /* E列 シリアルNo 180px制限＋自動フィット */
+    .col-e-cell {
+      width: 180px !important;
+      max-width: 180px !important;
+      min-width: 180px !important;
+      word-break: break-all;
+      font-size: clamp(8px, 1.1vw, 11px);
+      line-height: 1.1;
+      overflow: hidden;
+    }
+
+    /* 全行高さ 24px 固定 */
+    .row-h-24 {
+      height: 24px !important;
+      max-height: 24px !important;
     }
   </style>
 </head>
-<body class="h-full">
-
-  <div id="root" class="h-full"></div>
+<body class="bg-[#042219] text-[#E6DAA6] select-none text-base">
+  <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useRef, createContext, useContext } = React;
+    const { useState, useEffect, useRef } = React;
 
-    // --- 1. APIキー管理 Context ---
-    const ApiKeyContext = createContext();
+    function App() {
+      // 1. ヘッダー基本情報
+      const [headerInfo, setHeaderInfo] = useState({
+        docNo: '',       // 製造指図書No
+        modelName: '',   // 機種名
+        entryDate: '',   // 記入日
+        customer: '',    // 客先名
+        unitNo: '',      // 号機No
+        orderQty: '',    // 発注台数
+        elecStaff: ''    // エレキ担当者
+      });
 
-    const ApiKeyProvider = ({ children }) => {
-      const [apiKey, setApiKey] = useState(() => localStorage.getItem('GEMINI_API_KEY') || '');
-
-      const saveApiKey = (key) => {
-        setApiKey(key);
-        localStorage.setItem('GEMINI_API_KEY', key);
-      };
-
-      return (
-        <ApiKeyContext.Provider value={{ apiKey, saveApiKey }}>
-          {children}
-        </ApiKeyContext.Provider>
-      );
-    };
-
-    const useApiKey = () => useContext(ApiKeyContext);
-
-    // --- 2. AI OCR カメラ・解析コンポーネント ---
-    const OcrScannerCard = ({ onOcrSuccess }) => {
-      const { apiKey } = useApiKey();
-      const [isCamActive, setIsCamActive] = useState(false);
-      const [status, setStatus] = useState('Status: 待機中');
+      // OCR・カメラ用ステート
+      const [isOcrActive, setIsOcrActive] = useState(false);
+      const [ocrTarget, setOcrTarget] = useState(null);
+      const [isProcessing, setIsProcessing] = useState(false);
+      const [ocrResultText, setOcrResultText] = useState('');
+      
       const videoRef = useRef(null);
       const canvasRef = useRef(null);
       const streamRef = useRef(null);
 
-      const startCamera = async () => {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-          });
+      // 本日の日付を自動取得
+      useEffect(() => {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        setHeaderInfo(prev => ({ ...prev, entryDate: `${year}/${month}/${day}` }));
+      }, []);
+
+      const handleUppercaseChange = (field, value) => {
+        setHeaderInfo(prev => ({ ...prev, [field]: value.toUpperCase() }));
+      };
+
+      const handleNumberChange = (field, value) => {
+        const numOnly = value.replace(/[^0-9]/g, '');
+        setHeaderInfo(prev => ({ ...prev, [field]: numOnly }));
+      };
+
+      // ユニット（固定4種）
+      const [units, setUnits] = useState([
+        { id: 'power', label: '電源ユニット', model: 'JPMC-PSD3012N', serial: '', remarks: '' },
+        { id: 'cpu', label: 'CPU', model: 'JPMC-CP3202N-E', serial: '', remarks: '' },
+        { id: 'base', label: 'ベースユニット', model: 'JPMC-BUB3008N-E', serial: '', remarks: '' },
+        { id: 'lio', label: 'LIO-04', model: 'JPMC-IO2303-E', serial: '', remarks: '' }
+      ]);
+
+      const [servoPacks, setServoPacks] = useState([
+        { id: 'servo_1', label: '', model: '', serial: '', axis: '', remarks: '' }
+      ]);
+
+      const [currentStep, setCurrentStep] = useState(0);
+
+      const handleClearData = () => {
+        setHeaderInfo(prev => ({
+          docNo: '',
+          modelName: '',
+          entryDate: prev.entryDate,
+          customer: '',
+          unitNo: '',
+          orderQty: '',
+          elecStaff: ''
+        }));
+        setUnits(units.map(u => ({ ...u, serial: '', remarks: '' })));
+        setServoPacks([{ id: 'servo_1', label: '', model: '', serial: '', axis: '', remarks: '' }]);
+        setCurrentStep(0);
+        alert('入力データをクリアしました。');
+      };
+
+      const handleUnitChange = (index, field, value) => {
+        const updated = [...units];
+        updated[index][field] = value;
+        setUnits(updated);
+      };
+
+      const handleServoChange = (index, field, value) => {
+        const updated = [...servoPacks];
+        updated[index][field] = value;
+        setServoPacks(updated);
+      };
+
+      const handleAddServo = () => {
+        const newPack = {
+          id: `servo_${Date.now()}`,
+          label: '',
+          model: '',
+          serial: '',
+          axis: '',
+          remarks: ''
+        };
+        setServoPacks([...servoPacks, newPack]);
+      };
+
+      const handleRemoveServo = (index) => {
+        if (servoPacks.length <= 1) return;
+        const updated = servoPacks.filter((_, i) => i !== index);
+        setServoPacks(updated);
+      };
+
+      // --- OCR機能（カメラ起動・撮影・認識） ---
+      const startOcrCamera = (type, index, field) => {
+        setOcrTarget({ type, index, field });
+        setOcrResultText('');
+        setIsOcrActive(true);
+
+        navigator.mediaDevices?.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        }).then(stream => {
           streamRef.current = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             videoRef.current.play();
           }
-          setIsCamActive(true);
-          setStatus('Status: 撮影準備完了');
-        } catch (e) {
-          alert('カメラの起動に失敗しました。');
-        }
+        }).catch(err => {
+          console.error("Camera access error:", err);
+          alert("カメラの起動に失敗しました。アクセス権限を確認してください。");
+          stopOcrCamera();
+        });
       };
 
-      const stopCamera = () => {
+      const stopOcrCamera = () => {
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
           streamRef.current = null;
         }
-        setIsCamActive(false);
+        setIsOcrActive(false);
+        setIsProcessing(false);
+        setOcrTarget(null);
       };
 
-      useEffect(() => {
-        return () => stopCamera();
-      }, []);
-
-      const captureAndAnalyze = async () => {
-        if (!apiKey) {
-          alert('APIキーが設定されていません。');
-          return;
-        }
+      const captureAndRecognize = async () => {
+        if (!videoRef.current || !canvasRef.current) return;
+        setIsProcessing(true);
 
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        if (!video || !canvas) return;
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
 
-        canvas.width = video.videoWidth || 1280;
-        canvas.height = video.videoHeight || 720;
-        canvas.getContext('2d').drawImage(video, 0, 0);
-
-        const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-        setStatus('Status: AI (Gemini) 解析中...');
-
-        const promptText = `添付された銘板画像から製品型式("model")、シリアル番号("sn")、およびバージョン・リビジョン情報("version")を抽出しJSON形式で出力してください。
-JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         try {
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [
-                  { text: promptText },
-                  { inline_data: { mime_type: 'image/jpeg', data: base64 } }
-                ]
-              }]
-            })
+          // Tesseract.js で文字認識を実行
+          const { data } = await Tesseract.recognize(canvas, 'eng', {
+            tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-/'
           });
-
-          const data = await res.json();
-          if (data.error) {
-            setStatus(`Status: エラー (${data.error.message})`);
-            return;
-          }
-
-          const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            setStatus('Status: 解析成功！');
-            onOcrSuccess({
-              model: parsed.model !== '未検出' ? parsed.model : '',
-              sn: parsed.sn !== '未検出' ? parsed.sn : '',
-              version: parsed.version !== '未検出' ? parsed.version : ''
-            });
-          } else {
-            setStatus('Status: 解析失敗');
-          }
+          
+          const cleanText = data.text.replace(/[\r\n\s]+/g, '').toUpperCase();
+          setOcrResultText(cleanText || '（文字が検出できませんでした）');
         } catch (err) {
-          setStatus(`Status: 通信エラー (${err.message})`);
+          console.error("OCR Error:", err);
+          alert("文字認識処理に失敗しました。");
+        } finally {
+          setIsProcessing(false);
         }
       };
 
-      return (
-        <div className="bg-[#093325]/90 border border-[#E6DAA6]/30 p-3 sm:p-4 rounded-2xl text-center mb-3 w-full shadow-lg">
-          <div className="relative w-full h-48 sm:h-56 bg-black rounded-xl overflow-hidden flex items-center justify-center mb-3 border border-[#E6DAA6]/20">
-            <video ref={videoRef} playsInline muted className={`w-full h-full object-cover ${!isCamActive ? 'hidden' : ''}`} />
-            {!isCamActive && <span className="text-base text-gray-400">📷 カメラ停止中</span>}
-            <canvas ref={canvasRef} className="hidden" />
+      const confirmOcrResult = () => {
+        if (ocrTarget && ocrResultText && ocrResultText !== '（文字が検出できませんでした）') {
+          const { type, index, field } = ocrTarget;
+          if (type === 'unit') {
+            handleUnitChange(index, field, ocrResultText);
+          } else {
+            handleServoChange(index, field, ocrResultText);
+          }
+        }
+        stopOcrCamera();
+      };
+
+      const handlePrint = () => {
+        window.print();
+      };
+
+      // OCRモーダルUI
+      const renderOcrModal = () => {
+        if (!isOcrActive) return null;
+
+        return (
+          <div className="fixed inset-0 bg-black/95 flex flex-col items-center justify-between p-4 z-50">
+            <div className="w-full max-w-sm text-center pt-2">
+              <div className="text-white text-base font-bold mb-1">OCR（文字読み取り）カメラ</div>
+              <p className="text-xs text-[#00ffcc]">枠内に型式・シリアル文字を合わせて撮影してください</p>
+            </div>
+
+            <div className="w-full max-w-sm flex flex-col items-center my-auto relative">
+              <div className="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border border-gray-700">
+                <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+                {/* 撮影用ガイド枠 */}
+                <div className="absolute inset-0 border-2 border-dashed border-[#F5D887]/70 m-8 rounded-lg pointer-events-none flex items-center justify-center">
+                  <span className="text-[10px] text-[#F5D887] bg-black/60 px-2 py-0.5 rounded">テキスト認識領域</span>
+                </div>
+              </div>
+              <canvas ref={canvasRef} className="hidden" />
+
+              {/* 撮影ボタン */}
+              {!isProcessing && !ocrResultText && (
+                <button
+                  onClick={captureAndRecognize}
+                  className="mt-4 w-full bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-sm shadow-lg active:scale-95"
+                >
+                  📷 撮影して文字認識
+                </button>
+              )}
+
+              {/* 解析中表示 */}
+              {isProcessing && (
+                <div className="mt-4 text-center text-[#F5D887] font-bold text-sm animate-pulse">
+                  🔍 文字を解析中...
+                </div>
+              )}
+
+              {/* OCR読み取り結果 */}
+              {ocrResultText && (
+                <div className="w-full bg-[#093325] border-2 border-[#F5D887] p-3 rounded-2xl text-center shadow-2xl mt-3">
+                  <div className="text-[11px] text-[#E6DAA6]/70 mb-1 font-bold">OCR認識結果</div>
+                  <input
+                    type="text"
+                    value={ocrResultText}
+                    onChange={(e) => setOcrResultText(e.target.value.toUpperCase())}
+                    className="w-full text-center text-lg font-mono font-bold text-[#F5D887] bg-black/50 p-2 rounded-xl mb-3 border border-[#E6DAA6]/30 uppercase focus:outline-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setOcrResultText('')}
+                      className="flex-1 bg-gray-700 text-white font-bold py-2.5 rounded-xl text-xs active:scale-95"
+                    >
+                      🔄 再撮影
+                    </button>
+                    <button
+                      onClick={confirmOcrResult}
+                      className="flex-1 bg-[#F5D887] text-[#042219] font-bold py-2.5 rounded-xl text-xs active:scale-95 shadow-lg"
+                    >
+                      ✅ これで決定
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={stopOcrCamera}
+              className="w-full max-w-sm py-3 bg-red-600 text-white font-bold rounded-full mb-2 active:scale-95"
+            >
+              キャンセル
+            </button>
           </div>
+        );
+      };
 
-          <div className="flex gap-2 mb-2">
-            {!isCamActive ? (
-              <button onClick={startCamera} className="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base sm:text-lg">📷 カメラ起動</button>
-            ) : (
-              <button onClick={captureAndAnalyze} className="flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base sm:text-lg shadow-md">☁️ 撮影 & AI OCR解析</button>
-            )}
+      // --- 画面レンダリング（Step 0: 基本情報） ---
+      if (currentStep === 0) {
+        return (
+          <div className="min-h-screen p-5 flex flex-col justify-between max-w-lg mx-auto">
+            <div>
+              <div className="text-center my-6">
+                <h1 className="text-3xl font-bold tracking-wider text-[#F5D887]">QuickScan DB</h1>
+                <p className="text-sm text-[#E6DAA6]/70 mt-2">基本情報の入力（OCR対応版）</p>
+              </div>
+
+              <div className="space-y-4 bg-[#093325]/40 p-5 rounded-2xl border border-[#E6DAA6]/30 shadow-lg">
+                <div>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">製造指図書No</label>
+                  <input
+                    type="text"
+                    value={headerInfo.docNo}
+                    onChange={(e) => handleUppercaseChange('docNo', e.target.value)}
+                    placeholder="例: ORD-2026-X"
+                    className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">機種名</label>
+                  <input
+                    type="text"
+                    value={headerInfo.modelName}
+                    onChange={(e) => handleUppercaseChange('modelName', e.target.value)}
+                    placeholder="例: MODEL-A100"
+                    className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">記入日（自動取得）</label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={headerInfo.entryDate}
+                    className="w-full bg-[#093325]/50 border border-[#E6DAA6]/20 rounded-xl px-4 py-3 text-base text-[#E6DAA6]/70 cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">客先名</label>
+                  <input
+                    type="text"
+                    value={headerInfo.customer}
+                    onChange={(e) => handleUppercaseChange('customer', e.target.value)}
+                    placeholder="例: TANAKA CORP"
+                    className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">号機NO.</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={headerInfo.unitNo}
+                      onChange={(e) => handleNumberChange('unitNo', e.target.value)}
+                      placeholder="数字のみ"
+                      className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] focus:outline-none focus:border-[#F5D887]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">発注台数</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={headerInfo.orderQty}
+                      onChange={(e) => handleNumberChange('orderQty', e.target.value)}
+                      placeholder="数字のみ"
+                      className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] focus:outline-none focus:border-[#F5D887]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-[#E6DAA6] mb-1">エレキ担当者</label>
+                  <input
+                    type="text"
+                    value={headerInfo.elecStaff}
+                    onChange={(e) => handleUppercaseChange('elecStaff', e.target.value)}
+                    placeholder="例: YAMADA"
+                    className="w-full bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6] uppercase focus:outline-none focus:border-[#F5D887]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 space-y-3">
+              <button
+                onClick={() => setCurrentStep(1)}
+                className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg active:scale-95 transition-all shadow-xl"
+              >
+                次へ（ユニット入力）
+              </button>
+
+              <button
+                onClick={handleClearData}
+                className="w-full border border-red-500/50 text-red-400 py-3 rounded-xl text-base hover:bg-red-950/20 active:scale-95 transition-all"
+              >
+                入力情報をクリア
+              </button>
+            </div>
           </div>
-          <div className="text-sm text-[#00ffcc] font-mono font-bold">{status}</div>
-        </div>
-      );
-    };
+        );
+      }
 
-    // --- 3. メインアプリケーション ---
-    function MainApp() {
-      const { apiKey, saveApiKey } = useApiKey();
-      const [inputKey, setInputKey] = useState(apiKey);
+      // --- 固定ユニット入力 (Step 1 - 4) ---
+      if (currentStep >= 1 && currentStep <= 4) {
+        const uIndex = currentStep - 1;
+        const unit = units[uIndex];
 
-      const now = new Date();
-      const yy = String(now.getFullYear()).slice(-2);
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const dd = String(now.getDate()).padStart(2, '0');
-      const todayFormatted = `${now.getFullYear()}/${mm}/${dd}`;
-      const yymmdd = `${yy}${mm}${dd}`;
+        return (
+          <div className="min-h-screen p-5 flex flex-col justify-between max-w-lg mx-auto">
+            <div>
+              <div className="flex justify-between items-center text-base mb-6">
+                <button onClick={() => setCurrentStep(currentStep - 1)} className="text-[#E6DAA6] font-medium">← 前へ</button>
+                <span className="text-sm font-mono bg-[#093325] px-3 py-1 rounded-full">{currentStep} / {4 + servoPacks.length}</span>
+              </div>
 
-      const [baseInfo, setBaseInfo] = useState({
-        docNo: '',
-        modelName: '',
-        entryDate: todayFormatted,
-        customer: '',
-        unitNo: '',
-        orderQty: '',
-        elecStaff: ''
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-bold text-[#F5D887]">{unit.label}</h2>
+                <p className="text-sm text-[#E6DAA6]/70 mt-1">{unit.model}</p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm mb-1">製品型式</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={unit.model}
+                    className="w-full bg-[#093325]/50 border border-[#E6DAA6]/20 rounded-xl px-4 py-3 text-base text-[#E6DAA6]/70"
+                  />
+                </div>
+
+                {[
+                  { key: 'serial', label: 'シリアルNo' },
+                  { key: 'remarks', label: '備考' }
+                ].map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="block text-sm mb-1">{label}</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={unit[key]}
+                        onChange={(e) => handleUnitChange(uIndex, key, e.target.value)}
+                        placeholder="入力またはOCR読み取り"
+                        className="flex-1 bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6]"
+                      />
+                      <button
+                        onClick={() => startOcrCamera('unit', uIndex, key)}
+                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-lg hover:bg-[#093325]/80 active:scale-95"
+                        title="OCR撮影"
+                      >
+                        🔍
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-6">
+              <button
+                onClick={() => setCurrentStep(currentStep + 1)}
+                className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg active:scale-95 transition-all"
+              >
+                次へ
+              </button>
+            </div>
+
+            {renderOcrModal()}
+          </div>
+        );
+      }
+
+      // --- 追加機器入力 (Step 5 〜) ---
+      const servoIndex = currentStep - 5;
+      const totalSteps = 4 + servoPacks.length;
+
+      if (currentStep >= 5 && currentStep <= totalSteps) {
+        const currentPack = servoPacks[servoIndex];
+
+        return (
+          <div className="min-h-screen p-5 flex flex-col justify-between max-w-lg mx-auto">
+            <div>
+              <div className="flex justify-between items-center text-base mb-6">
+                <button onClick={() => setCurrentStep(currentStep - 1)} className="text-[#E6DAA6] font-medium">← 前へ</button>
+                <span className="text-sm font-mono bg-[#093325] px-3 py-1 rounded-full">{currentStep} / {totalSteps}</span>
+              </div>
+
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-bold text-[#F5D887]">
+                  {currentPack.axis ? `${currentPack.axis}` : `追加機器 ${servoIndex + 1}`}
+                </h2>
+                <p className="text-sm text-[#E6DAA6]/70 mt-1">OCR読み取り・直接入力を行ってください</p>
+              </div>
+
+              <div className="space-y-4">
+                {[
+                  { key: 'model', label: '製品型式' },
+                  { key: 'serial', label: 'シリアルNo' },
+                  { key: 'axis', label: '機器名称' },
+                  { key: 'remarks', label: '備考' }
+                ].map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="block text-sm mb-1">{label}</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={currentPack[key]}
+                        onChange={(e) => handleServoChange(servoIndex, key, e.target.value)}
+                        placeholder="入力またはOCR読み取り"
+                        className="flex-1 bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-base text-[#E6DAA6]"
+                      />
+                      <button
+                        onClick={() => startOcrCamera('servo', servoIndex, key)}
+                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-lg hover:bg-[#093325]/80 active:scale-95"
+                        title="OCR撮影"
+                      >
+                        🔍
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={handleAddServo}
+                  className="flex-1 border border-dashed border-[#E6DAA6]/70 text-[#E6DAA6] rounded-xl py-3 text-base font-medium"
+                >
+                  ＋ 機器を追加
+                </button>
+                {servoPacks.length > 1 && (
+                  <button
+                    onClick={() => handleRemoveServo(servoIndex)}
+                    className="border border-red-500/50 text-red-400 rounded-xl px-4 py-3 text-base"
+                  >
+                    削除
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-6">
+              <button
+                onClick={() => setCurrentStep(currentStep + 1)}
+                className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg active:scale-95 transition-all"
+              >
+                {servoIndex < servoPacks.length - 1 ? '次の機器へ' : 'プレビュー（印刷）へ'}
+              </button>
+            </div>
+
+            {renderOcrModal()}
+          </div>
+        );
+      }
+
+      // --- プレビュー・印刷画面（全25行固定・A4 1ページ統一デザイン） ---
+      const allRows = [];
+      units.forEach(u => {
+        allRows.push({ model: u.model, serial: u.serial, axis: u.label, remarks: u.remarks });
+      });
+      servoPacks.forEach(s => {
+        allRows.push({ model: s.model, serial: s.serial, axis: s.axis, remarks: s.remarks });
       });
 
-      const [fixedUnits, setFixedUnits] = useState([
-        { id: 'power', title: '電源ユニット', model: '', serial: '', remarks: '' },
-        { id: 'cpu', title: 'CPU', model: '', serial: '', remarks: '' },
-        { id: 'base', title: 'ベースユニット', model: '', serial: '', remarks: '' },
-        { id: 'lio', title: 'LIO-04', model: '', serial: '', remarks: '' }
-      ]);
-
-      const [devicePacks, setDevicePacks] = useState([
-        { id: 'device_1', title: '', model: '', serial: '', remarks: '' }
-      ]);
-
-      const [step, setStep] = useState(0);
-
-      const handleSaveKey = () => {
-        if (!inputKey.trim()) return alert('APIキーを入力してください');
-        saveApiKey(inputKey.trim());
-        alert('APIキーを保存しました');
-      };
-
-      const handleNextFromHome = () => {
-        if (!apiKey.trim()) return alert('APIキーを設定してください');
-        setStep(1);
-      };
-
-      const handleAddDevice = () => {
-        const nextIndex = devicePacks.length + 1;
-        setDevicePacks([
-          ...devicePacks,
-          { id: `device_${Date.now()}`, title: '', model: '', serial: '', remarks: '' }
-        ]);
-        setStep(4 + nextIndex);
-      };
-
-      const handleSaveCSV = () => {
-        const sanitize = (str) => (str || '').replace(/[/\\?%*:|"<>]/g, '_');
-        const filename = `${yymmdd}_${sanitize(baseInfo.modelName) || '機種名'}_${sanitize(baseInfo.docNo) || '指図書No'}_${sanitize(baseInfo.unitNo) || '号機'}.csv`;
-
-        let csvContent = "\uFEFF";
-        csvContent += `製造指図書No,${baseInfo.docNo},客先名,${baseInfo.customer}\n`;
-        csvContent += `機種名,${baseInfo.modelName},号機No,${baseInfo.unitNo}\n`;
-        csvContent += `記入日,${baseInfo.entryDate},発注台数,${baseInfo.orderQty}\n`;
-        csvContent += `,,エレキ担当,${baseInfo.elecStaff}\n\n`;
-        csvContent += `No,製品型式,シリアルNo,機器名称,備考(Version)\n`;
-
-        const allItems = [
-          ...fixedUnits.map(u => ({ model: u.model, serial: u.serial, title: u.title, remarks: u.remarks })),
-          ...devicePacks.map(s => ({ model: s.model, serial: s.serial, title: s.title, remarks: s.remarks }))
-        ];
-
-        for (let i = 1; i <= 25; i++) {
-          const item = allItems[i - 1] || {};
-          csvContent += `${i},"${item.model || ''}","${item.serial || ''}","${item.title || ''}","${item.remarks || ''}"\n`;
-        }
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      };
-
-      // --- STEP 0: 初期画面 ---
-      if (step === 0) {
-        return (
-          <div className="app-container max-w-xl mx-auto w-full px-4 justify-between">
-            <div className="w-full flex-1 flex flex-col justify-evenly py-2">
-              <div>
-                <h1 className="text-3xl font-extrabold text-center text-[#F5D887] mb-1">QuickScan DB</h1>
-                <p className="text-sm text-center text-[#E6DAA6]/80 mb-2 font-medium">基本情報設定</p>
-              </div>
-
-              <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl mb-2">
-                <label className="block text-sm font-bold text-[#F5D887] mb-1.5">🔑 APIキー設定 (必須)</label>
-                <div className="flex gap-2">
-                  <input type="password" value={inputKey} onChange={(e) => setInputKey(e.target.value)} placeholder="AIzaSy..." className="flex-1 bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
-                  <button onClick={handleSaveKey} className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-xl text-base whitespace-nowrap">保存</button>
-                </div>
-              </div>
-
-              <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3">
-                <div>
-                  <label className="block text-sm font-bold mb-1">製造指図書No (大文字)</label>
-                  <input
-                    type="text"
-                    value={baseInfo.docNo}
-                    onChange={(e) => setBaseInfo({...baseInfo, docNo: e.target.value.toUpperCase()})}
-                    placeholder="例: ORD-2026-X"
-                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-1">機種名 (大文字)</label>
-                  <input
-                    type="text"
-                    value={baseInfo.modelName}
-                    onChange={(e) => setBaseInfo({...baseInfo, modelName: e.target.value.toUpperCase()})}
-                    placeholder="例: MODEL-A100"
-                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase font-mono"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="block text-sm font-bold mb-1">記入日 (自動)</label>
-                    <input type="text" value={baseInfo.entryDate} readOnly className="w-full bg-[#042219]/50 border border-[#E6DAA6]/20 rounded-xl px-3 py-2.5 text-base opacity-70 font-mono" />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-sm font-bold mb-1">客先名</label>
-                    <input type="text" value={baseInfo.customer} onChange={(e) => setBaseInfo({...baseInfo, customer: e.target.value})} placeholder="例: TANAKA" className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="block text-sm font-bold mb-1">号機No (数値)</label>
-                    <input
-                      type="number"
-                      value={baseInfo.unitNo}
-                      onChange={(e) => setBaseInfo({...baseInfo, unitNo: e.target.value})}
-                      placeholder="1"
-                      className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-sm font-bold mb-1">発注台数 (数値)</label>
-                    <input
-                      type="number"
-                      value={baseInfo.orderQty}
-                      onChange={(e) => setBaseInfo({...baseInfo, orderQty: e.target.value})}
-                      placeholder="1"
-                      className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-1">エレキ担当</label>
-                  <input type="text" value={baseInfo.elecStaff} onChange={(e) => setBaseInfo({...baseInfo, elecStaff: e.target.value})} placeholder="例: YAMADA" className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
-                </div>
-              </div>
-            </div>
-
-            <div className="py-3">
-              <button onClick={handleNextFromHome} className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-xl">入力・スキャンを開始 (電源ユニットへ)</button>
-            </div>
-          </div>
-        );
+      // 25行に満たない場合は自動的に空行を埋める
+      while (allRows.length < 25) {
+        allRows.push({ model: '', serial: '', axis: '', remarks: '' });
       }
 
-      // --- STEP 1~4: 固定ユニット画面 ---
-      if (step >= 1 && step <= 4) {
-        const uIndex = step - 1;
-        const current = fixedUnits[uIndex];
-
-        return (
-          <div className="app-container max-w-xl mx-auto w-full px-4 justify-between">
-            <div className="w-full flex-1 flex flex-col justify-between py-1 overflow-y-auto">
-              <div>
-                <div className="flex justify-between text-base mb-1 text-[#E6DAA6]/90 font-bold">
-                  <button onClick={() => setStep(step - 1)} className="hover:underline">← 前へ</button>
-                  <span>{step} / {4 + devicePacks.length}</span>
-                </div>
-                <h2 className="text-2xl font-bold text-center text-[#F5D887] mb-2">{current.title} 画面</h2>
-              </div>
-
-              <OcrScannerCard onOcrSuccess={(res) => {
-                const updated = [...fixedUnits];
-                if (res.model) updated[uIndex].model = res.model;
-                if (res.sn) updated[uIndex].serial = res.sn;
-                if (res.version) updated[uIndex].remarks = res.version;
-                setFixedUnits(updated);
-              }} />
-
-              <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3">
-                <div>
-                  <label className="block text-sm mb-1 font-bold">製品型式</label>
-                  <input type="text" value={current.model} onChange={(e) => { const u = [...fixedUnits]; u[uIndex].model = e.target.value; setFixedUnits(u); }} placeholder="型式を入力またはスキャン" className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono" />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1 font-bold">シリアルNo</label>
-                  <input type="text" value={current.serial} onChange={(e) => { const u = [...fixedUnits]; u[uIndex].serial = e.target.value; setFixedUnits(u); }} placeholder="シリアルを入力またはスキャン" className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono" />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1 font-bold">備考 (Version)</label>
-                  <input type="text" value={current.remarks} onChange={(e) => { const u = [...fixedUnits]; u[uIndex].remarks = e.target.value; setFixedUnits(u); }} placeholder="例: REV.A / VER.1.0" className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
-                </div>
-              </div>
-            </div>
-
-            <div className="py-3">
-              <button onClick={() => setStep(step + 1)} className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-lg">次へ</button>
-            </div>
-          </div>
-        );
-      }
-
-      // --- STEP 5+: 各種機器画面 ---
-      if (step >= 5 && step < 999) {
-        const sIndex = step - 5;
-        const current = devicePacks[sIndex];
-
-        return (
-          <div className="app-container max-w-xl mx-auto w-full px-4 justify-between">
-            <div className="w-full flex-1 flex flex-col justify-between py-1 overflow-y-auto">
-              <div>
-                <div className="flex justify-between text-base mb-1 text-[#E6DAA6]/90 font-bold">
-                  <button onClick={() => setStep(step - 1)} className="hover:underline">← 前へ</button>
-                  <span>{step} / {4 + devicePacks.length}</span>
-                </div>
-                <h2 className="text-2xl font-bold text-center text-[#F5D887] mb-2">各種機器 {sIndex + 1} 画面</h2>
-              </div>
-
-              <OcrScannerCard onOcrSuccess={(res) => {
-                const updated = [...devicePacks];
-                if (res.model) updated[sIndex].model = res.model;
-                if (res.sn) updated[sIndex].serial = res.sn;
-                if (res.version) updated[sIndex].remarks = res.version.toUpperCase();
-                setDevicePacks(updated);
-              }} />
-
-              <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3">
-                <div>
-                  <label className="block text-sm mb-1 font-bold">機器名称 (大文字)</label>
-                  <input
-                    type="text"
-                    value={current.title}
-                    onChange={(e) => {
-                      const s = [...devicePacks];
-                      s[sIndex].title = e.target.value.toUpperCase();
-                      setDevicePacks(s);
-                    }}
-                    placeholder="例: SERVO PACK / INVERTER"
-                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1 font-bold">製品型式</label>
-                  <input type="text" value={current.model} onChange={(e) => { const s = [...devicePacks]; s[sIndex].model = e.target.value; setDevicePacks(s); }} placeholder="型式を入力またはスキャン" className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono" />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1 font-bold">シリアルNo</label>
-                  <input type="text" value={current.serial} onChange={(e) => { const s = [...devicePacks]; s[sIndex].serial = e.target.value; setDevicePacks(s); }} placeholder="シリアルを入力またはスキャン" className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono" />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1 font-bold">備考 (Version - 大文字)</label>
-                  <input
-                    type="text"
-                    value={current.remarks}
-                    onChange={(e) => {
-                      const s = [...devicePacks];
-                      s[sIndex].remarks = e.target.value.toUpperCase();
-                      setDevicePacks(s);
-                    }}
-                    placeholder="例: REV.A / VER.1.0"
-                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-2">
-                <button onClick={handleAddDevice} className="w-full border border-dashed border-[#F5D887] text-[#F5D887] py-3 rounded-xl text-base font-bold bg-[#F5D887]/10">＋ 機器追加 (次の各種機器画面へ)</button>
-              </div>
-            </div>
-
-            <div className="py-3 space-y-2">
-              {sIndex < devicePacks.length - 1 && (
-                <button onClick={() => setStep(step + 1)} className="w-full bg-[#093325] border border-[#E6DAA6] text-[#E6DAA6] py-3 rounded-full text-base font-bold">次の各種機器 ({sIndex + 2}) へ</button>
-              )}
-              <button onClick={() => setStep(999)} className="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-lg">入力結果へ (印刷プレビュー表示)</button>
-            </div>
-          </div>
-        );
-      }
-
-      // --- STEP 999: 入力結果 & 印刷用シリアル記入シート ---
-      if (step === 999) {
-        const allItems = [
-          ...fixedUnits.map(u => ({ model: u.model, serial: u.serial, title: u.title, remarks: u.remarks })),
-          ...devicePacks.map(s => ({ model: s.model, serial: s.serial, title: s.title, remarks: s.remarks }))
-        ];
-
-        const rows = Array.from({ length: 25 }, (_, index) => {
-          return allItems[index] || { model: '', serial: '', title: '', remarks: '' };
-        });
-
-        return (
-          <div className="min-h-[100dvh] p-2 sm:p-4 max-w-5xl mx-auto w-full">
-            {/* 操作ボタンエリア (非印刷) */}
-            <div className="no-print flex flex-wrap justify-between items-center gap-2 mb-4">
-              <button onClick={() => setStep(4 + devicePacks.length)} className="text-[#E6DAA6] text-base font-bold">← 修正に戻る</button>
-              <div className="flex gap-2">
-                <button onClick={handleSaveCSV} className="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base">
-                  💾 CSV保存
-                </button>
-                {/* iOS 用アプリ直接起動ボタン */}
-                <a 
-                  href="sharpdeskmobile://" 
-                  className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base inline-block text-center shadow-md active:scale-95"
-                >
-                  🖨️ Sharpdesk (iOS)
-                </a>
-                {/* Android 用アプリ直接起動ボタン (Intent スキーム) */}
-                <a 
-                  href="intent://#Intent;scheme=sharpdeskmobile;package=jp.co.sharp.print.sharpdeskmobile;end" 
-                  className="bg-[#00ffcc] text-[#042219] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base inline-block text-center shadow-md active:scale-95"
-                >
-                  🖨️ Sharpdesk (Android)
-                </a>
-              </div>
-            </div>
-
-            {/* 横スクロール対応コンテナ */}
-            <div className="overflow-x-auto w-full border border-gray-700/50 rounded-lg">
-              {/* A4印刷エリア */}
-              <div className="print-area bg-white text-black p-4 sm:p-6 rounded-lg shadow-xl min-w-[680px]">
-                <h1 className="text-center font-bold text-xl sm:text-2xl mb-3 tracking-widest border-b-2 border-black pb-1">シリアル記入シート</h1>
-
-                <table className="w-full text-xs sm:text-sm border-collapse border border-black mb-3">
-                  <tbody>
-                    <tr>
-                      <th className="border border-black p-1 bg-gray-100 w-[15%] text-left">製造指図書No</th>
-                      <td className="border border-black p-1 w-[35%] font-bold font-mono uppercase">{baseInfo.docNo}</td>
-                      <th className="border border-black p-1 bg-gray-100 w-[15%] text-left">客先名</th>
-                      <td className="border border-black p-1 w-[35%]">{baseInfo.customer}</td>
-                    </tr>
-                    <tr>
-                      <th className="border border-black p-1 bg-gray-100 text-left">機種名</th>
-                      <td className="border border-black p-1 font-bold uppercase">{baseInfo.modelName}</td>
-                      <th className="border border-black p-1 bg-gray-100 text-left">号機No</th>
-                      <td className="border border-black p-1 font-mono">{baseInfo.unitNo}</td>
-                    </tr>
-                    <tr>
-                      <th className="border border-black p-1 bg-gray-100 text-left">記入日</th>
-                      <td className="border border-black p-1 font-mono">{baseInfo.entryDate}</td>
-                      <th className="border border-black p-1 bg-gray-100 text-left">発注台数</th>
-                      <td className="border border-black p-1 font-mono">{baseInfo.orderQty}</td>
-                    </tr>
-                    <tr>
-                      <th className="border border-black p-1 bg-gray-100 text-left" colSpan="2"></th>
-                      <th className="border border-black p-1 bg-gray-100 text-left">エレキ担当</th>
-                      <td className="border border-black p-1">{baseInfo.elecStaff}</td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                <table className="w-full text-xs sm:text-sm border-collapse border border-black">
-                  <thead>
-                    <tr className="bg-gray-200 border-b border-black">
-                      <th className="border-r border-black p-1 text-center w-8">No</th>
-                      <th className="border-r border-black p-1 w-1/3">製品型式</th>
-                      <th className="border-r border-black p-1 w-1/3">シリアルNo</th>
-                      <th className="border-r border-black p-1 w-1/5">機器名称</th>
-                      <th className="p-1">備考(Version)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, idx) => (
-                      <tr key={idx} className="border-b border-black h-5 sm:h-6">
-                        <td className="border-r border-black text-center font-mono font-bold bg-gray-50">{idx + 1}</td>
-                        <td className="border-r border-black px-1 font-mono">{row.model}</td>
-                        <td className="border-r border-black px-1 font-mono">{row.serial}</td>
-                        <td className="border-r border-black px-1 font-mono uppercase">{row.title}</td>
-                        <td className="px-1 font-mono">{row.remarks}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      return null;
-    }
-
-    function App() {
       return (
-        <ApiKeyProvider>
-          <MainApp />
-        </ApiKeyProvider>
+        <div className="min-h-screen bg-gray-100 text-black p-2 sm:p-6 flex flex-col items-center">
+          <div className="no-print w-full max-w-4xl flex justify-between items-center mb-4 bg-[#042219] p-4 rounded-xl text-[#E6DAA6]">
+            <button
+              onClick={() => setCurrentStep(totalSteps)}
+              className="px-4 py-2 bg-[#093325] border border-[#E6DAA6]/40 rounded-lg text-sm"
+            >
+              ← 入力に戻る
+            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handlePrint}
+                className="px-6 py-2.5 bg-[#F5D887] text-[#042219] font-bold rounded-lg text-sm shadow-md active:scale-95 transition-all flex items-center gap-2"
+              >
+                <span>🖨️</span>
+                <span>印刷 (A4 1ページ出力)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* A4 印刷対象領域 */}
+          <div className="print-area bg-white text-black w-full max-w-[210mm] p-[8mm] shadow-2xl rounded-sm border border-gray-300 font-sans">
+            <div className="text-center border-b-2 border-black pb-2 mb-3">
+              <h1 className="text-xl font-bold tracking-widest uppercase">製品シリアル記入シート</h1>
+            </div>
+
+            <div className="grid grid-cols-2 text-xs border border-black mb-3">
+              <div className="border-r border-black divide-y divide-black">
+                <div className="h-6 px-2 flex items-center">
+                  <span className="font-bold shrink-0 mr-1">製造指図書No:</span>
+                  <span className="flex-1 font-semibold truncate">{headerInfo.docNo}</span>
+                </div>
+                <div className="h-6 px-2 flex items-center">
+                  <span className="font-bold shrink-0 mr-1">機種名:</span>
+                  <span className="flex-1 font-semibold truncate">{headerInfo.modelName}</span>
+                </div>
+                <div className="h-6 px-2 flex items-center">
+                  <span className="font-bold shrink-0 mr-1">記入日:</span>
+                  <span className="flex-1 font-semibold truncate">{headerInfo.entryDate}</span>
+                </div>
+              </div>
+
+              <div className="divide-y divide-black">
+                <div className="h-[4.5] px-2 flex items-center">
+                  <span className="font-bold shrink-0 mr-1">客先名:</span>
+                  <span className="flex-1 font-semibold truncate">{headerInfo.customer}</span>
+                </div>
+                <div className="h-[4.5] px-2 flex items-center">
+                  <span className="font-bold shrink-0 mr-1">号機No:</span>
+                  <span className="flex-1 font-semibold truncate">{headerInfo.unitNo}</span>
+                </div>
+                <div className="h-[4.5] px-2 flex items-center">
+                  <span className="font-bold shrink-0 mr-1">発注台数:</span>
+                  <span className="flex-1 font-semibold truncate">{headerInfo.orderQty}</span>
+                </div>
+                <div className="h-[4.5] px-2 flex items-center">
+                  <span className="font-bold shrink-0 mr-1">エレキ担当者:</span>
+                  <span className="flex-1 font-semibold truncate">{headerInfo.elecStaff}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="table-container w-full overflow-x-auto">
+              <table className="preview-table min-w-[640px] w-full border-collapse border border-black text-[11px]">
+                <thead>
+                  <tr className="bg-gray-200 border-b border-black text-center h-7 font-bold">
+                    <th className="border border-black w-8 shrink-0">No</th>
+                    <th className="border border-black min-w-[130px]">製品型式</th>
+                    <th className="border border-black col-e-cell">シリアルNo</th>
+                    <th className="border border-black min-w-[120px]">機器名称</th>
+                    <th className="border border-black min-w-[150px]">備考</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allRows.slice(0, 25).map((row, idx) => (
+                    <tr key={idx} className="row-h-24 border-b border-black text-center leading-none">
+                      <td className="border border-black font-mono">{idx + 1}</td>
+                      <td className="border border-black text-left px-2 truncate">{row.model}</td>
+                      <td className="border border-black col-e-cell px-1 font-mono font-semibold">
+                        {row.serial}
+                      </td>
+                      <td className="border border-black text-left px-2 truncate">{row.axis}</td>
+                      <td className="border border-black text-left px-2 whitespace-nowrap overflow-hidden text-ellipsis">{row.remarks}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-2 text-[10px] text-gray-500 flex justify-between items-center">
+              <span>QuickScan DB System Generated</span>
+              <span>Page 1 / 1</span>
+            </div>
+          </div>
+        </div>
       );
     }
 
