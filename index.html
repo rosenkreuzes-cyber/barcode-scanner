@@ -14,7 +14,7 @@
   <script src="https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
 
   <style>
-    /* A4 縦サイズ 1ページ印刷用CSS（OS差異を問わず一律適用） */
+    /* A4 縦サイズ 1ページ印刷用CSS */
     @media print {
       html, body {
         height: 100%;
@@ -86,9 +86,9 @@
         elecStaff: ''    // エレキ担当者
       });
 
-      // OCR・カメラ用ステート
+      // OCR専用ステート
       const [isOcrActive, setIsOcrActive] = useState(false);
-      const [ocrTarget, setOcrTarget] = useState(null);
+      const [ocrTarget, setOcrTarget] = useState(null); // { type, index, field }
       const [isProcessing, setIsProcessing] = useState(false);
       const [ocrResultText, setOcrResultText] = useState('');
       
@@ -174,27 +174,31 @@
         setServoPacks(updated);
       };
 
-      // --- OCR機能（カメラ起動・撮影・認識） ---
+      // --- OCRカメラ起動処理 ---
       const startOcrCamera = (type, index, field) => {
         setOcrTarget({ type, index, field });
         setOcrResultText('');
+        setIsProcessing(false);
         setIsOcrActive(true);
 
         navigator.mediaDevices?.getUserMedia({
           video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
         }).then(stream => {
           streamRef.current = stream;
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.play();
-          }
+          setTimeout(() => {
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+              videoRef.current.play();
+            }
+          }, 200);
         }).catch(err => {
-          console.error("Camera access error:", err);
-          alert("カメラの起動に失敗しました。アクセス権限を確認してください。");
+          console.error("Camera error:", err);
+          alert("カメラの起動に失敗しました。カメラ権限を確認してください。");
           stopOcrCamera();
         });
       };
 
+      // --- OCR停止処理 ---
       const stopOcrCamera = () => {
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
@@ -203,8 +207,10 @@
         setIsOcrActive(false);
         setIsProcessing(false);
         setOcrTarget(null);
+        setOcrResultText('');
       };
 
+      // --- 撮影 ＆ Tesseract.js 文字認識処理 ---
       const captureAndRecognize = async () => {
         if (!videoRef.current || !canvasRef.current) return;
         setIsProcessing(true);
@@ -218,23 +224,26 @@
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         try {
-          // Tesseract.js で文字認識を実行
+          // Tesseract.js による文字認識の実行
           const { data } = await Tesseract.recognize(canvas, 'eng', {
             tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-/'
           });
-          
+
+          // 取得した文字列の整形（スペースや改行の削除、大文字化）
           const cleanText = data.text.replace(/[\r\n\s]+/g, '').toUpperCase();
-          setOcrResultText(cleanText || '（文字が検出できませんでした）');
+          setOcrResultText(cleanText || '（文字が検出されませんでした）');
         } catch (err) {
           console.error("OCR Error:", err);
-          alert("文字認識処理に失敗しました。");
+          alert("文字認識処理に失敗しました。もう一度お試しください。");
+          setOcrResultText('');
         } finally {
           setIsProcessing(false);
         }
       };
 
+      // --- 認識結果の確定 ---
       const confirmOcrResult = () => {
-        if (ocrTarget && ocrResultText && ocrResultText !== '（文字が検出できませんでした）') {
+        if (ocrTarget && ocrResultText && ocrResultText !== '（文字が検出されませんでした）') {
           const { type, index, field } = ocrTarget;
           if (type === 'unit') {
             handleUnitChange(index, field, ocrResultText);
@@ -249,23 +258,25 @@
         window.print();
       };
 
-      // OCRモーダルUI
+      // --- OCR撮影・確認モーダル画面 ---
       const renderOcrModal = () => {
         if (!isOcrActive) return null;
 
         return (
           <div className="fixed inset-0 bg-black/95 flex flex-col items-center justify-between p-4 z-50">
             <div className="w-full max-w-sm text-center pt-2">
-              <div className="text-white text-base font-bold mb-1">OCR（文字読み取り）カメラ</div>
-              <p className="text-xs text-[#00ffcc]">枠内に型式・シリアル文字を合わせて撮影してください</p>
+              <div className="text-white text-base font-bold mb-1">OCR（文字読み取り）</div>
+              <div className="inline-flex items-center gap-1.5 bg-[#093325] border border-[#00ffcc]/40 px-3 py-1 rounded-full text-xs font-mono font-bold text-[#00ffcc]">
+                <span className="w-2 h-2 rounded-full bg-[#00ffcc] animate-pulse"></span>
+                <span>文字認識モード稼働中</span>
+              </div>
             </div>
 
-            <div className="w-full max-w-sm flex flex-col items-center my-auto relative">
+            <div className="w-full max-w-sm flex flex-col items-center my-auto">
               <div className="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border border-gray-700">
                 <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-                {/* 撮影用ガイド枠 */}
-                <div className="absolute inset-0 border-2 border-dashed border-[#F5D887]/70 m-8 rounded-lg pointer-events-none flex items-center justify-center">
-                  <span className="text-[10px] text-[#F5D887] bg-black/60 px-2 py-0.5 rounded">テキスト認識領域</span>
+                <div className="absolute inset-0 border-2 border-dashed border-[#F5D887]/80 m-6 rounded-lg pointer-events-none flex items-center justify-center">
+                  <span className="text-[10px] text-[#F5D887] bg-black/70 px-2 py-0.5 rounded font-bold">ここに型式・シリアルを合わせる</span>
                 </div>
               </div>
               <canvas ref={canvasRef} className="hidden" />
@@ -274,28 +285,33 @@
               {!isProcessing && !ocrResultText && (
                 <button
                   onClick={captureAndRecognize}
-                  className="mt-4 w-full bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-sm shadow-lg active:scale-95"
+                  className="w-full mt-4 bg-[#F5D887] text-[#042219] font-bold py-3.5 rounded-xl text-sm active:scale-95 shadow-xl flex items-center justify-center gap-2"
                 >
-                  📷 撮影して文字認識
+                  <span>📷</span>
+                  <span>文字を撮影して読み取る</span>
                 </button>
               )}
 
-              {/* 解析中表示 */}
+              {/* 処理中表示 */}
               {isProcessing && (
-                <div className="mt-4 text-center text-[#F5D887] font-bold text-sm animate-pulse">
-                  🔍 文字を解析中...
+                <div className="w-full mt-4 bg-[#093325] border border-[#F5D887]/50 p-4 rounded-2xl text-center">
+                  <div className="text-sm font-bold text-[#F5D887] animate-pulse">
+                    🔍 AIが文字を解析中... (数秒かかります)
+                  </div>
                 </div>
               )}
 
-              {/* OCR読み取り結果 */}
+              {/* 読み取り結果確認パネル */}
               {ocrResultText && (
                 <div className="w-full bg-[#093325] border-2 border-[#F5D887] p-3 rounded-2xl text-center shadow-2xl mt-3">
-                  <div className="text-[11px] text-[#E6DAA6]/70 mb-1 font-bold">OCR認識結果</div>
+                  <div className="flex justify-between items-center text-[11px] text-[#E6DAA6]/70 mb-1 px-1 font-bold">
+                    <span>OCR認識結果（編集可能）</span>
+                  </div>
                   <input
                     type="text"
                     value={ocrResultText}
                     onChange={(e) => setOcrResultText(e.target.value.toUpperCase())}
-                    className="w-full text-center text-lg font-mono font-bold text-[#F5D887] bg-black/50 p-2 rounded-xl mb-3 border border-[#E6DAA6]/30 uppercase focus:outline-none"
+                    className="w-full bg-black/50 border border-[#E6DAA6]/40 text-center text-lg font-mono font-bold text-[#F5D887] p-2.5 rounded-xl mb-3 uppercase focus:outline-none focus:border-[#F5D887]"
                   />
                   <div className="flex gap-2">
                     <button
@@ -481,8 +497,8 @@
                       />
                       <button
                         onClick={() => startOcrCamera('unit', uIndex, key)}
-                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-lg hover:bg-[#093325]/80 active:scale-95"
-                        title="OCR撮影"
+                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-xl hover:bg-[#093325]/80 active:scale-95"
+                        title="OCRで文字を読み取る"
                       >
                         🔍
                       </button>
@@ -525,7 +541,7 @@
                 <h2 className="text-2xl font-bold text-[#F5D887]">
                   {currentPack.axis ? `${currentPack.axis}` : `追加機器 ${servoIndex + 1}`}
                 </h2>
-                <p className="text-sm text-[#E6DAA6]/70 mt-1">OCR読み取り・直接入力を行ってください</p>
+                <p className="text-sm text-[#E6DAA6]/70 mt-1">OCR読み取りまたは直接入力</p>
               </div>
 
               <div className="space-y-4">
@@ -547,8 +563,8 @@
                       />
                       <button
                         onClick={() => startOcrCamera('servo', servoIndex, key)}
-                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-lg hover:bg-[#093325]/80 active:scale-95"
-                        title="OCR撮影"
+                        className="bg-[#093325] border border-[#E6DAA6]/40 rounded-xl px-4 py-3 text-xl hover:bg-[#093325]/80 active:scale-95"
+                        title="OCRで文字を読み取る"
                       >
                         🔍
                       </button>
@@ -589,7 +605,7 @@
         );
       }
 
-      // --- プレビュー・印刷画面（全25行固定・A4 1ページ統一デザイン） ---
+      // --- プレビュー・印刷画面（全25行固定） ---
       const allRows = [];
       units.forEach(u => {
         allRows.push({ model: u.model, serial: u.serial, axis: u.label, remarks: u.remarks });
@@ -598,7 +614,6 @@
         allRows.push({ model: s.model, serial: s.serial, axis: s.axis, remarks: s.remarks });
       });
 
-      // 25行に満たない場合は自動的に空行を埋める
       while (allRows.length < 25) {
         allRows.push({ model: '', serial: '', axis: '', remarks: '' });
       }
@@ -623,7 +638,6 @@
             </div>
           </div>
 
-          {/* A4 印刷対象領域 */}
           <div className="print-area bg-white text-black w-full max-w-[210mm] p-[8mm] shadow-2xl rounded-sm border border-gray-300 font-sans">
             <div className="text-center border-b-2 border-black pb-2 mb-3">
               <h1 className="text-xl font-bold tracking-widest uppercase">製品シリアル記入シート</h1>
@@ -701,7 +715,7 @@
       );
     }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    ReactDOM.createRoot(getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
