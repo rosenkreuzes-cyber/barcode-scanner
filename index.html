@@ -66,15 +66,6 @@
       height: 24px !important;
       max-height: 24px !important;
     }
-
-    /* カメラの緑画面チラつき・GPUエンコードバグ完全防止 */
-    video {
-      background-color: #000000 !important;
-      object-fit: cover;
-      will-change: transform;
-      -webkit-transform: translate3d(0, 0, 0);
-      transform: translate3d(0, 0, 0);
-    }
   </style>
 </head>
 <body class="bg-[#042219] text-[#E6DAA6] select-none text-base">
@@ -183,59 +174,28 @@
         setServoPacks(updated);
       };
 
-      // --- OCRカメラ起動処理（メタデータ読み込み完了までレンダリングを遅延） ---
+      // --- OCRカメラ起動処理 ---
       const startOcrCamera = (type, index, field) => {
         setOcrTarget({ type, index, field });
         setOcrResultText('');
         setIsProcessing(false);
         setIsOcrActive(true);
 
-        const openCamera = async () => {
-          try {
-            // 制約条件を最小限（booleanまたは基本facingMode）にしてハードウェア不整合を防止
-            const stream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: 'environment' },
-              audio: false
-            });
-
-            streamRef.current = stream;
-
+        navigator.mediaDevices?.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        }).then(stream => {
+          streamRef.current = stream;
+          setTimeout(() => {
             if (videoRef.current) {
-              const video = videoRef.current;
-              video.srcObject = stream;
-              video.setAttribute('playsinline', 'true');
-              video.setAttribute('muted', 'true');
-
-              // メタデータ（サイズ情報）の準備が完了してから再生を開始（緑画面防止の最重要ポイント）
-              video.onloadedmetadata = () => {
-                video.play().catch(e => console.error("Play Error:", e));
-              };
+              videoRef.current.srcObject = stream;
+              videoRef.current.play();
             }
-          } catch (err) {
-            console.warn("標準カメラ起動失敗、代替オプション試行:", err);
-            try {
-              // バックカメラ直接指定が失敗した場合、デフォルトカメラで再試行
-              const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-              streamRef.current = fallbackStream;
-              if (videoRef.current) {
-                const video = videoRef.current;
-                video.srcObject = fallbackStream;
-                video.setAttribute('playsinline', 'true');
-                video.setAttribute('muted', 'true');
-                video.onloadedmetadata = () => video.play();
-              }
-            } catch (fallbackErr) {
-              console.error("Camera access failed:", fallbackErr);
-              alert("カメラの起動に失敗しました。アクセス許可を確認してください。");
-              stopOcrCamera();
-            }
-          }
-        };
-
-        // DOMの描画（モーダル展開）完了後にカメラ処理を発火させる
-        setTimeout(() => {
-          openCamera();
-        }, 100);
+          }, 200);
+        }).catch(err => {
+          console.error("Camera error:", err);
+          alert("カメラの起動に失敗しました。カメラ権限を確認してください。");
+          stopOcrCamera();
+        });
       };
 
       // --- OCR停止処理 ---
@@ -257,22 +217,19 @@
 
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        
-        // 実際のビデオフレームの物理解像度を取得
-        const width = video.videoWidth || 640;
-        const height = video.videoHeight || 480;
-
-        canvas.width = width;
-        canvas.height = height;
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
 
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, width, height);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         try {
+          // Tesseract.js による文字認識の実行
           const { data } = await Tesseract.recognize(canvas, 'eng', {
             tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-/'
           });
 
+          // 取得した文字列の整形（スペースや改行の削除、大文字化）
           const cleanText = data.text.replace(/[\r\n\s]+/g, '').toUpperCase();
           setOcrResultText(cleanText || '（文字が検出されませんでした）');
         } catch (err) {
@@ -317,13 +274,7 @@
 
             <div className="w-full max-w-sm flex flex-col items-center my-auto">
               <div className="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border border-gray-700">
-                <video 
-                  ref={videoRef} 
-                  className="w-full h-full object-cover" 
-                  playsInline 
-                  muted 
-                  autoPlay 
-                />
+                <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
                 <div className="absolute inset-0 border-2 border-dashed border-[#F5D887]/80 m-6 rounded-lg pointer-events-none flex items-center justify-center">
                   <span className="text-[10px] text-[#F5D887] bg-black/70 px-2 py-0.5 rounded font-bold">ここに型式・シリアルを合わせる</span>
                 </div>
@@ -768,3 +719,4 @@
   </script>
 </body>
 </html>
+
