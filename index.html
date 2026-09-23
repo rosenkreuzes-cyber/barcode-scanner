@@ -278,24 +278,6 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
         }
       };
 
-      // Sharpdesk Mobile アプリ起動処理 (ストアリダイレクト防止修正版)
-      const handleOpenSharpdesk = () => {
-        const isAndroid = /Android/i.test(navigator.userAgent);
-        
-        if (isAndroid) {
-          // カスタムスキームでアプリの直接起動を最優先試行
-          window.location.href = "sharpdeskmobile://";
-
-          // 起動しなかった場合のみインテント呼出し（500ms待機）
-          setTimeout(() => {
-            window.location.href = "intent://#Intent;scheme=sharpdeskmobile;package=jp.co.sharp.print.sharpdeskmobile;end";
-          }, 500);
-        } else {
-          // iOS
-          window.location.href = "sharpdeskmobile://";
-        }
-      };
-
       const handleSaveCSV = () => {
         const sanitize = (str) => (str || '').replace(/[/\\?%*:|"<>]/g, '_');
         const filename = `${yymmdd}_${sanitize(baseInfo.modelName) || '機種名'}_${sanitize(baseInfo.docNo) || '指図書No'}_${sanitize(baseInfo.unitNo) || '号機'}.csv`;
@@ -549,6 +531,8 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
           return allItems[index] || { model: '', serial: '', title: '', remarks: '' };
         });
 
+        const sharpdeskIntentUrl = "intent://#Intent;scheme=sharpdeskmobile;package=jp.co.sharp.print.sharpdeskmobile;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;end";
+
         return (
           <div className="min-h-[100dvh] p-2 sm:p-4 max-w-5xl mx-auto w-full">
             {/* 操作ボタンエリア (非印刷) */}
@@ -565,12 +549,14 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                 <button onClick={handleSaveCSV} className="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base">
                   💾 CSV保存
                 </button>
-                <button 
-                  onClick={handleOpenSharpdesk}
-                  className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base text-center shadow-md active:scale-95"
+
+                {/* <a> タグによる直接インテント呼出しへの修正 */}
+                <a
+                  href={sharpdeskIntentUrl}
+                  className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base text-center shadow-md active:scale-95 inline-block no-underline"
                 >
-                  🖨️ Sharpdesk Mobileで印刷/送信
-                </button>
+                  🖨️ Sharpdesk Mobile起動
+                </a>
               </div>
             </div>
 
@@ -623,7 +609,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                       <tr key={idx} className="border-b border-black h-5 sm:h-6">
                         <td className="border-r border-black text-center font-mono font-bold bg-gray-50">{idx + 1}</td>
                         <td className="border-r border-black px-1 font-mono">{row.model}</td>
-                        <td className="border-r border-black px-1 font-mono">{row.serial}</td>
+                        <td className="border-r border-black px-[#1px] font-mono">{row.serial}</td>
                         <td className="border-r border-black px-1 font-mono uppercase">{row.title}</td>
                         <td className="px-1 font-mono">{row.remarks}</td>
                       </tr>
