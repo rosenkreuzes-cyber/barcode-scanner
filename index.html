@@ -38,8 +38,9 @@
       flex-direction: column;
     }
 
+    /* 印刷用CSS: 印刷時にはUI要素を非表示にし、シートのみを白地に黒文字で出力 */
     @media print {
-      body {
+      body, #root {
         background: white !important;
         color: black !important;
       }
@@ -51,6 +52,8 @@
         width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
       }
       table {
         width: 100%;
@@ -61,6 +64,7 @@
         padding: 4px 6px;
         font-size: 11px !important;
         text-align: left;
+        color: black !important;
       }
       th {
         background-color: #f2f2f2 !important;
@@ -278,6 +282,11 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
         }
       };
 
+      // 標準印刷ダイアログの呼び出し
+      const handlePrint = () => {
+        window.print();
+      };
+
       const handleSaveCSV = () => {
         const sanitize = (str) => (str || '').replace(/[/\\?%*:|"<>]/g, '_');
         const filename = `${yymmdd}_${sanitize(baseInfo.modelName) || '機種名'}_${sanitize(baseInfo.docNo) || '指図書No'}_${sanitize(baseInfo.unitNo) || '号機'}.csv`;
@@ -486,7 +495,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                   <input type="text" value={current.model} onChange={(e) => { const s = [...devicePacks]; s[sIndex].model = e.target.value; setDevicePacks(s); }} placeholder="型式を入力またはスキャン" className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono" />
                 </div>
                 <div>
-                  <label className="block text-sm mb-1 font-bold">シリアルNo</label>
+                  <label className="block text-sm font-bold">シリアルNo</label>
                   <input type="text" value={current.serial} onChange={(e) => { const s = [...devicePacks]; s[sIndex].serial = e.target.value; setDevicePacks(s); }} placeholder="シリアルを入力またはスキャン" className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono" />
                 </div>
                 <div>
@@ -531,8 +540,6 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
           return allItems[index] || { model: '', serial: '', title: '', remarks: '' };
         });
 
-        const sharpdeskIntentUrl = "intent://#Intent;scheme=sharpdeskmobile;package=jp.co.sharp.print.sharpdeskmobile;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;end";
-
         return (
           <div className="min-h-[100dvh] p-2 sm:p-4 max-w-5xl mx-auto w-full">
             {/* 操作ボタンエリア (非印刷) */}
@@ -550,13 +557,13 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                   💾 CSV保存
                 </button>
 
-                {/* <a> タグによる直接インテント呼出しへの修正 */}
-                <a
-                  href={sharpdeskIntentUrl}
-                  className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base text-center shadow-md active:scale-95 inline-block no-underline"
+                {/* window.print() を呼び出す印刷ボタン */}
+                <button
+                  onClick={handlePrint}
+                  className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base text-center shadow-md active:scale-95"
                 >
-                  🖨️ Sharpdesk Mobile起動
-                </a>
+                  🖨️ 印刷 (印刷ダイアログ起動)
+                </button>
               </div>
             </div>
 
@@ -609,7 +616,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                       <tr key={idx} className="border-b border-black h-5 sm:h-6">
                         <td className="border-r border-black text-center font-mono font-bold bg-gray-50">{idx + 1}</td>
                         <td className="border-r border-black px-1 font-mono">{row.model}</td>
-                        <td className="border-r border-black px-[#1px] font-mono">{row.serial}</td>
+                        <td className="border-r border-black px-1 font-mono">{row.serial}</td>
                         <td className="border-r border-black px-1 font-mono uppercase">{row.title}</td>
                         <td className="px-1 font-mono">{row.remarks}</td>
                       </tr>
