@@ -11,6 +11,8 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- jsQR (QRコード解析用ライブラリ) -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -38,7 +40,7 @@
       flex-direction: column;
     }
 
-    /* 印刷用CSS: 印刷時にはUI要素を非表示にし、シートのみを白地に黒文字で出力 */
+    /* 印刷用CSS */
     @media print {
       body, #root {
         background: white !important;
@@ -104,7 +106,81 @@
 
     const useApiKey = () => useContext(ApiKeyContext);
 
-    // --- 2. AI OCR カメラ・解析コンポーネント ---
+    // --- 2. APIキー読み取り用 QRコードスキャナー ---
+    const ApiKeyQrScanner = ({ onScanSuccess, onClose }) => {
+      const videoRef = useRef(null);
+      const canvasRef = useRef(null);
+      const animFrameRef = useRef(null);
+
+      useEffect(() => {
+        let stream = null;
+
+        const startScan = async () => {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: 'environment' }
+            });
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+              videoRef.current.play();
+              animFrameRef.current = requestAnimationFrame(scanFrame);
+            }
+          } catch (err) {
+            alert('カメラの起動に失敗しました。');
+            onClose();
+          }
+        };
+
+        const scanFrame = () => {
+          const video = videoRef.current;
+          const canvas = canvasRef.current;
+          if (video && video.readyState === video.HAVE_ENOUGH_DATA && canvas) {
+            const ctx = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+            // jsQRで解析
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: 'dontInvert',
+            });
+
+            if (code && code.data) {
+              // 読み取り成功
+              onScanSuccess(code.data.trim());
+              return; // ループ終了
+            }
+          }
+          animFrameRef.current = requestAnimationFrame(scanFrame);
+        };
+
+        startScan();
+
+        return () => {
+          if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+          if (stream) stream.getTracks().forEach(track => track.stop());
+        };
+      }, []);
+
+      return (
+        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4">
+          <div className="text-[#F5D887] text-lg font-bold mb-2">📷 APIキーのQRコードをかざしてください</div>
+          <div className="relative w-full max-w-sm h-64 bg-black rounded-xl overflow-hidden border-2 border-[#00ffcc] mb-4">
+            <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
+            <canvas ref={canvasRef} className="hidden" />
+          </div>
+          <button
+            onClick={onClose}
+            className="bg-gray-700 text-white font-bold px-6 py-3 rounded-full text-base"
+          >
+            キャンセル
+          </button>
+        </div>
+      );
+    };
+
+    // --- 3. AI OCR カメラ・解析コンポーネント ---
     const OcrScannerCard = ({ onOcrSuccess }) => {
       const { apiKey } = useApiKey();
       const [isCamActive, setIsCamActive] = useState(false);
@@ -221,10 +297,11 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
       );
     };
 
-    // --- 3. メインアプリケーション ---
+    // --- 4. メインアプリケーション ---
     function MainApp() {
       const { apiKey, saveApiKey } = useApiKey();
       const [inputKey, setInputKey] = useState(apiKey);
+      const [showQrScanner, setShowQrScanner] = useState(false);
 
       const now = new Date();
       const yy = String(now.getFullYear()).slice(-2);
@@ -262,6 +339,13 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
         alert('APIキーを保存しました');
       };
 
+      const handleQrScanSuccess = (scannedKey) => {
+        setShowQrScanner(false);
+        setInputKey(scannedKey);
+        saveApiKey(scannedKey);
+        alert('QRコードからAPIキーを読み込み・保存しました！');
+      };
+
       const handleNextFromHome = () => {
         if (!apiKey.trim()) return alert('APIキーを設定してください');
         setStep(1);
@@ -282,7 +366,6 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
         }
       };
 
-      // 標準印刷ダイアログの呼び出し
       const handlePrint = () => {
         window.print();
       };
@@ -323,6 +406,13 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
       if (step === 0) {
         return (
           <div className="app-container max-w-xl mx-auto w-full px-4 justify-between">
+            {showQrScanner && (
+              <ApiKeyQrScanner
+                onScanSuccess={handleQrScanSuccess}
+                onClose={() => setShowQrScanner(false)}
+              />
+            )}
+
             <div className="w-full flex-1 flex flex-col justify-evenly py-2">
               <div>
                 <h1 className="text-3xl font-extrabold text-center text-[#F5D887] mb-1">QuickScan DB</h1>
@@ -331,9 +421,26 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
 
               <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl mb-2">
                 <label className="block text-sm font-bold text-[#F5D887] mb-1.5">🔑 APIキー設定 (必須)</label>
-                <div className="flex gap-2">
-                  <input type="password" value={inputKey} onChange={(e) => setInputKey(e.target.value)} placeholder="AIzaSy..." className="flex-1 bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
-                  <button onClick={handleSaveKey} className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-xl text-base whitespace-nowrap">保存</button>
+                <div className="flex gap-1.5 mb-2">
+                  <input
+                    type="password"
+                    value={inputKey}
+                    onChange={(e) => setInputKey(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="flex-1 bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base"
+                  />
+                  <button
+                    onClick={() => setShowQrScanner(true)}
+                    className="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-3 py-2.5 rounded-xl text-sm whitespace-nowrap active:scale-95"
+                  >
+                    📷 QR読取
+                  </button>
+                  <button
+                    onClick={handleSaveKey}
+                    className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-xl text-base whitespace-nowrap active:scale-95"
+                  >
+                    保存
+                  </button>
                 </div>
               </div>
 
@@ -542,7 +649,6 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
 
         return (
           <div className="min-h-[100dvh] p-2 sm:p-4 max-w-5xl mx-auto w-full">
-            {/* 操作ボタンエリア (非印刷) */}
             <div className="no-print flex flex-wrap justify-between items-center gap-2 mb-4">
               <div className="flex gap-3 items-center">
                 <button onClick={() => setStep(4 + devicePacks.length)} className="text-[#E6DAA6] text-base font-bold hover:underline">
@@ -556,8 +662,6 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                 <button onClick={handleSaveCSV} className="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base">
                   💾 CSV保存
                 </button>
-
-                {/* window.print() を呼び出す印刷ボタン */}
                 <button
                   onClick={handlePrint}
                   className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base text-center shadow-md active:scale-95"
@@ -567,9 +671,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
               </div>
             </div>
 
-            {/* 横スクロール対応コンテナ */}
             <div className="overflow-x-auto w-full border border-gray-700/50 rounded-lg">
-              {/* A4印刷エリア */}
               <div className="print-area bg-white text-black p-4 sm:p-6 rounded-lg shadow-xl min-w-[680px]">
                 <h1 className="text-center font-bold text-xl sm:text-2xl mb-3 tracking-widest border-b-2 border-black pb-1">シリアル記入シート</h1>
 
