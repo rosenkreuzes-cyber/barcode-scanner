@@ -274,6 +274,22 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
         setStep(4 + nextIndex);
       };
 
+      const handleGoTop = () => {
+        if (window.confirm('TOP画面に戻りますか？（入力した情報は保持されます）')) {
+          setStep(0);
+        }
+      };
+
+      // Sharpdesk Mobile アプリ起動処理 (OS判定)
+      const handleOpenSharpdesk = () => {
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        if (isAndroid) {
+          window.location.href = "intent://#Intent;scheme=sharpdeskmobile;package=jp.co.sharp.print.sharpdeskmobile;end";
+        } else {
+          window.location.href = "sharpdeskmobile://";
+        }
+      };
+
       const handleSaveCSV = () => {
         const sanitize = (str) => (str || '').replace(/[/\\?%*:|"<>]/g, '_');
         const filename = `${yymmdd}_${sanitize(baseInfo.modelName) || '機種名'}_${sanitize(baseInfo.docNo) || '指図書No'}_${sanitize(baseInfo.unitNo) || '号機'}.csv`;
@@ -531,25 +547,25 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
           <div className="min-h-[100dvh] p-2 sm:p-4 max-w-5xl mx-auto w-full">
             {/* 操作ボタンエリア (非印刷) */}
             <div className="no-print flex flex-wrap justify-between items-center gap-2 mb-4">
-              <button onClick={() => setStep(4 + devicePacks.length)} className="text-[#E6DAA6] text-base font-bold">← 修正に戻る</button>
+              <div className="flex gap-3 items-center">
+                <button onClick={() => setStep(4 + devicePacks.length)} className="text-[#E6DAA6] text-base font-bold hover:underline">
+                  ← 修正に戻る
+                </button>
+                <button onClick={handleGoTop} className="text-[#F5D887] text-base font-bold hover:underline">
+                  🏠 TOP画面へ
+                </button>
+              </div>
               <div className="flex gap-2">
                 <button onClick={handleSaveCSV} className="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base">
                   💾 CSV保存
                 </button>
-                {/* iOS 用アプリ直接起動ボタン */}
-                <a 
-                  href="sharpdeskmobile://" 
-                  className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base inline-block text-center shadow-md active:scale-95"
+                {/* OS自動判定による Sharpdesk Mobile 統一起動ボタン */}
+                <button 
+                  onClick={handleOpenSharpdesk}
+                  className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base text-center shadow-md active:scale-95"
                 >
-                  🖨️ Sharpdesk (iOS)
-                </a>
-                {/* Android 用アプリ直接起動ボタン (Intent スキーム) */}
-                <a 
-                  href="intent://#Intent;scheme=sharpdeskmobile;package=jp.co.sharp.print.sharpdeskmobile;end" 
-                  className="bg-[#00ffcc] text-[#042219] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base inline-block text-center shadow-md active:scale-95"
-                >
-                  🖨️ Sharpdesk (Android)
-                </a>
+                  🖨️ Sharpdesk Mobileで印刷/送信
+                </button>
               </div>
             </div>
 
