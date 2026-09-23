@@ -29,7 +29,6 @@
       color-scheme: dark;
     }
 
-    /* 画面いっぱいに広げるコンテナ設定 */
     .app-container {
       min-height: 100dvh;
       height: 100dvh;
@@ -39,7 +38,6 @@
       flex-direction: column;
     }
 
-    /* 印刷用A4縦1ページスタイル */
     @media print {
       body {
         background: white !important;
@@ -280,12 +278,20 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
         }
       };
 
-      // Sharpdesk Mobile アプリ起動処理 (OS判定)
+      // Sharpdesk Mobile アプリ起動処理 (ストアリダイレクト防止修正版)
       const handleOpenSharpdesk = () => {
         const isAndroid = /Android/i.test(navigator.userAgent);
+        
         if (isAndroid) {
-          window.location.href = "intent://#Intent;scheme=sharpdeskmobile;package=jp.co.sharp.print.sharpdeskmobile;end";
+          // カスタムスキームでアプリの直接起動を最優先試行
+          window.location.href = "sharpdeskmobile://";
+
+          // 起動しなかった場合のみインテント呼出し（500ms待機）
+          setTimeout(() => {
+            window.location.href = "intent://#Intent;scheme=sharpdeskmobile;package=jp.co.sharp.print.sharpdeskmobile;end";
+          }, 500);
         } else {
+          // iOS
           window.location.href = "sharpdeskmobile://";
         }
       };
@@ -559,7 +565,6 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                 <button onClick={handleSaveCSV} className="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base">
                   💾 CSV保存
                 </button>
-                {/* OS自動判定による Sharpdesk Mobile 統一起動ボタン */}
                 <button 
                   onClick={handleOpenSharpdesk}
                   className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base text-center shadow-md active:scale-95"
