@@ -72,7 +72,6 @@
         background-color: #f2f2f2 !important;
         font-weight: bold;
       }
-      /* 印刷時の型式・シリアル・備考の文字サイズ指定 */
       .print-large-text {
         font-size: 13px !important;
         font-weight: bold !important;
@@ -238,13 +237,14 @@
         const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
         setStatus('Status: AI (Gemini) 解析中...');
 
-        // 4. バージョン情報の誤認識を防ぐ厳密な指示を出力プロンプトに追加
-        const promptText = `添付された銘板画像から製品型式("model")、シリアル番号("sn")、およびバージョン・リビジョン情報("version")を抽出しJSON形式で出力してください。
+        // バージョン情報も柔軟かつ正しく読み取れるようプロンプトを調整
+        const promptText = `添付された銘板画像から製品型式("model")、シリアル番号("sn")、およびバージョン・リビジョン・HW/FW情報("version")を抽出しJSON形式で出力してください。
 
-【非常に重要な判定ルール】
-1. "version" には、"REV", "VER", "FW", "SW", "VERSION", "REVISION" や基板のリビジョン等、明確にバージョン・リビジョンと記載されている文字のみを抽出してください。
-2. 製品の型式名・型番（例: "GD-275", "FMC-71", "LIO-04", "PLC", "CPU" 等）や追加の型番文字列を誤って "version" に入れないでください。型式文字列はすべて "model" に含めてください。
-3. 明確なバージョン表記が存在しない場合は、"version" は空文字 "" にしてください。
+【抽出ルール】
+1. "model": メインの製品型式・型番（例: LIO-04, FMC-71, GD-275 等）。
+2. "sn": シリアル番号（S/N, SERIAL, 製造番号）。
+3. "version": バージョン、リビジョン、HW/FW/SW表記、または型式とは別で銘板に記載されている補助記号・数字（例: REV.A, Ver.1.0, FW1.02, A, 1.0 など）。
+   ※ただし、"model" や "sn" として抽出した文字列と全く同じものを重複して "version" に入れないでください。該当する情報が見当たらない場合のみ空文字 "" にしてください。
 
 JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
 
@@ -716,7 +716,6 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                   </tbody>
                 </table>
 
-                {/* 1・2・3 の修正を反映したメインテーブル */}
                 <table className="w-full text-xs sm:text-sm border-collapse border border-black">
                   <thead>
                     <tr className="bg-gray-200 border-b border-black">
@@ -731,7 +730,6 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                     {rows.map((row, idx) => (
                       <tr key={idx} className="border-b border-black h-5 sm:h-6">
                         <td className="border-r border-black text-center font-mono font-bold bg-gray-50">{idx + 1}</td>
-                        {/* 3. 文字サイズ拡大 (text-sm ~ print-large-text) 適用 */}
                         <td className="border-r border-black px-1 font-mono text-sm sm:text-base font-bold print-large-text">{row.model}</td>
                         <td className="border-r border-black px-1 font-mono text-sm sm:text-base font-bold print-large-text">{row.serial}</td>
                         <td className="border-r border-black px-1 font-mono uppercase text-xs sm:text-sm">{row.title}</td>
