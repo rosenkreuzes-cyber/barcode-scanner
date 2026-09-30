@@ -455,23 +455,23 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
 
               <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3">
                 <div>
-                  <label className="block text-sm font-bold mb-1">製造指図書No (大文字)</label>
+                  <label className="block text-sm font-bold mb-1">製造指図書No</label>
                   <input
                     type="text"
                     value={baseInfo.docNo}
-                    onChange={(e) => setBaseInfo({...baseInfo, docNo: e.target.value.toUpperCase()})}
+                    onChange={(e) => setBaseInfo({...baseInfo, docNo: e.target.value})}
                     placeholder="例: ORD-2026-X"
-                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase font-mono"
+                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold mb-1">機種名 (大文字)</label>
+                  <label className="block text-sm font-bold mb-1">機種名</label>
                   <input
                     type="text"
                     value={baseInfo.modelName}
-                    onChange={(e) => setBaseInfo({...baseInfo, modelName: e.target.value.toUpperCase()})}
+                    onChange={(e) => setBaseInfo({...baseInfo, modelName: e.target.value})}
                     placeholder="例: MODEL-A100"
-                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase font-mono"
+                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono"
                   />
                 </div>
                 <div className="flex gap-2">
@@ -592,17 +592,17 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
 
               <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3">
                 <div>
-                  <label className="block text-sm mb-1 font-bold">機器名称 (大文字)</label>
+                  <label className="block text-sm mb-1 font-bold">機器名称</label>
                   <input
                     type="text"
                     value={current.title}
                     onChange={(e) => {
                       const s = [...devicePacks];
-                      s[sIndex].title = e.target.value.toUpperCase();
+                      s[sIndex].title = e.target.value;
                       setDevicePacks(s);
                     }}
-                    placeholder="例: SERVO PACK / INVERTER"
-                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase"
+                    placeholder="例: サーボパック / インバータ"
+                    className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base"
                   />
                 </div>
                 <div>
@@ -676,13 +676,13 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                   <tbody>
                     <tr>
                       <th className="border border-black p-1 bg-gray-100 w-[15%] text-left">製造指図書No</th>
-                      <td className="border border-black p-1 w-[35%] font-bold font-mono uppercase">{baseInfo.docNo}</td>
+                      <td className="border border-black p-1 w-[35%] font-bold font-mono">{baseInfo.docNo}</td>
                       <th className="border border-black p-1 bg-gray-100 w-[15%] text-left">客先名</th>
                       <td className="border border-black p-1 w-[35%]">{baseInfo.customer}</td>
                     </tr>
                     <tr>
                       <th className="border border-black p-1 bg-gray-100 text-left">機種名</th>
-                      <td className="border border-black p-1 font-bold uppercase">{baseInfo.modelName}</td>
+                      <td className="border border-black p-1 font-bold">{baseInfo.modelName}</td>
                       <th className="border border-black p-1 bg-gray-100 text-left">号機No</th>
                       <td className="border border-black p-1 font-mono">{baseInfo.unitNo}</td>
                     </tr>
@@ -716,7 +716,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                         <td className="border-r border-black text-center font-mono font-bold bg-gray-50">{idx + 1}</td>
                         <td className="border-r border-black px-1 font-mono text-sm sm:text-base font-bold print-large-text">{row.model}</td>
                         <td className="border-r border-black px-1 font-mono text-sm sm:text-base font-bold print-large-text">{row.serial}</td>
-                        <td className="border-r border-black px-1 font-mono uppercase text-xs sm:text-sm">{row.title}</td>
+                        <td className="border-r border-black px-1 font-mono text-xs sm:text-sm">{row.title}</td>
                         <td className="px-1 font-mono text-xs sm:text-sm">{row.remarks}</td>
                       </tr>
                     ))}
