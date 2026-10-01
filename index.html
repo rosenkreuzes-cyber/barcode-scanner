@@ -290,7 +290,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
         <div className="bg-[#093325]/90 border border-[#E6DAA6]/30 p-3 sm:p-4 rounded-2xl text-center mb-3 w-full shadow-lg">
           <div className="relative w-full h-48 sm:h-56 bg-black rounded-xl overflow-hidden flex items-center justify-center mb-3 border border-[#E6DAA6]/20">
             <video ref={videoRef} playsInline muted className={`w-full h-full object-cover ${!isCamActive ? 'hidden' : ''}`} />
-            {!isCamActive && <span className="text-base text-gray-400">📷 カメラ停止中</span>}
+            {!isCamActive && <span className="text-base text-[#E6DAA6]/70">📷 カメラ停止中</span>}
             <canvas ref={canvasRef} className="hidden" />
           </div>
 
@@ -311,6 +311,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
       const { apiKey, saveApiKey } = useApiKey();
       const [inputKey, setInputKey] = useState(apiKey);
       const [showQrScanner, setShowQrScanner] = useState(false);
+      const fileInputRef = useRef(null);
 
       const now = new Date();
       const yy = String(now.getFullYear()).slice(-2);
@@ -379,6 +380,102 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
         window.print();
       };
 
+      // --- CSVファイルの読み込み機能 ---
+      const handleLoadCSV = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const text = event.target.result;
+            const lines = text.split(/\r\n|\n/).map(line => line.trim()).filter(line => line.length > 0);
+
+            // CSVクォート解除関数
+            const clean = (val) => val ? val.replace(/^"|"$/g, '').trim() : '';
+
+            // 1~4行目: ヘッダー情報解析
+            let newBaseInfo = { ...baseInfo };
+            lines.forEach(line => {
+              const cols = line.split(',').map(clean);
+              if (cols[0] === '製造指図書No') {
+                newBaseInfo.docNo = cols[1] || '';
+                newBaseInfo.customer = cols[3] || '';
+              } else if (cols[0] === '機種名') {
+                newBaseInfo.modelName = cols[1] || '';
+                newBaseInfo.unitNo = cols[3] || '';
+              } else if (cols[0] === '記入日') {
+                newBaseInfo.entryDate = cols[1] || todayFormatted;
+                newBaseInfo.orderQty = cols[3] || '';
+              } else if (cols[2] === 'エレキ担当') {
+                newBaseInfo.elecStaff = cols[3] || '';
+              }
+            });
+            setBaseInfo(newBaseInfo);
+
+            // 明細行の開始位置特定
+            const tableHeaderIdx = lines.findIndex(l => l.includes('No,製品型式,シリアルNo'));
+            if (tableHeaderIdx !== -1) {
+              const itemLines = lines.slice(tableHeaderIdx + 1);
+
+              let newFixed = [
+                { id: 'power', title: '電源ユニット', model: '', serial: '', remarks: '' },
+                { id: 'cpu', title: 'CPU', model: '', serial: '', remarks: '' },
+                { id: 'base', title: 'ベースユニット', model: '', serial: '', remarks: '' },
+                { id: 'lio', title: 'LIO-04', model: '', serial: '', remarks: '' }
+              ];
+              let newDevices = [];
+
+              itemLines.forEach((line, idx) => {
+                if (idx >= 25) return;
+                // CSVのカンマ区切り解析（クォート考慮）
+                const match = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
+                const cols = match ? match.map(clean) : [];
+                
+                const no = parseInt(cols[0], 10);
+                if (isNaN(no)) return;
+
+                const model = cols[1] || '';
+                const serial = cols[2] || '';
+                const title = cols[3] || '';
+                const remarks = cols[4] || '';
+
+                if (no >= 1 && no <= 4) {
+                  newFixed[no - 1].model = model;
+                  newFixed[no - 1].serial = serial;
+                  newFixed[no - 1].remarks = remarks;
+                } else if (no >= 5) {
+                  // 有効なデータが存在するか、最後のデータ行までの間
+                  if (model || serial || title || remarks || newDevices.length > 0) {
+                    newDevices.push({
+                      id: `device_${Date.now()}_${no}`,
+                      title: title,
+                      model: model,
+                      serial: serial,
+                      remarks: remarks
+                    });
+                  }
+                }
+              });
+
+              setFixedUnits(newFixed);
+              if (newDevices.length > 0) {
+                setDevicePacks(newDevices);
+              } else {
+                setDevicePacks([{ id: 'device_1', title: '', model: '', serial: '', remarks: '' }]);
+              }
+            }
+
+            alert('CSVファイルからデータを復元しました。\n各画面で未記載箇所のスキャン・追記が行えます。');
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          } catch (err) {
+            alert('CSVファイルの読み込みに失敗しました。フォーマットを確認してください。');
+          }
+        };
+
+        reader.readAsText(file, 'UTF-8');
+      };
+
       const handleSaveCSV = () => {
         const sanitize = (str) => (str || '').replace(/[/\\?%*:|"<>]/g, '_');
         const filename = `${yymmdd}_${sanitize(baseInfo.modelName) || '機種名'}_${sanitize(baseInfo.docNo) || '指図書No'}_${sanitize(baseInfo.unitNo) || '号機'}.csv`;
@@ -422,34 +519,55 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
               />
             )}
 
+            {/* 非表示のファイル選択Input */}
+            <input
+              type="file"
+              accept=".csv"
+              ref={fileInputRef}
+              onChange={handleLoadCSV}
+              className="hidden"
+            />
+
             <div className="w-full flex-1 flex flex-col justify-evenly py-2">
               <div>
                 <h1 className="text-3xl font-extrabold text-center text-[#F5D887] mb-1">QuickScan DB</h1>
                 <p className="text-sm text-center text-[#E6DAA6]/80 mb-2 font-medium">基本情報設定</p>
               </div>
 
-              <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl mb-2">
-                <label className="block text-sm font-bold text-[#F5D887] mb-1.5">🔑 APIキー設定 (必須)</label>
-                <div className="flex gap-1.5 mb-2">
-                  <input
-                    type="password"
-                    value={inputKey}
-                    onChange={(e) => setInputKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="flex-1 bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base"
-                  />
+              {/* CSV読込 & APIキー設定エリア */}
+              <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl mb-2 space-y-3">
+                <div>
                   <button
-                    onClick={() => setShowQrScanner(true)}
-                    className="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-3 py-2.5 rounded-xl text-sm whitespace-nowrap active:scale-95"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full bg-[#093325] border-2 border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base flex items-center justify-center gap-2 active:scale-95 shadow-md"
                   >
-                    📷 QR読取
+                    📂 保存済みCSVを読み込んで編集・追記
                   </button>
-                  <button
-                    onClick={handleSaveKey}
-                    className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-xl text-base whitespace-nowrap active:scale-95"
-                  >
-                    保存
-                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-[#F5D887] mb-1.5">🔑 APIキー設定 (必須)</label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="password"
+                      value={inputKey}
+                      onChange={(e) => setInputKey(e.target.value)}
+                      placeholder="AIzaSy..."
+                      className="flex-1 bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base"
+                    />
+                    <button
+                      onClick={() => setShowQrScanner(true)}
+                      className="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-3 py-2.5 rounded-xl text-sm whitespace-nowrap active:scale-95"
+                    >
+                      📷 QR読取
+                    </button>
+                    <button
+                      onClick={handleSaveKey}
+                      className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-xl text-base whitespace-nowrap active:scale-95"
+                    >
+                      保存
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -643,6 +761,14 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
 
         return (
           <div className="min-h-[100dvh] p-2 sm:p-4 max-w-5xl mx-auto w-full">
+            <input
+              type="file"
+              accept=".csv"
+              ref={fileInputRef}
+              onChange={handleLoadCSV}
+              className="hidden"
+            />
+
             {/* 操作ボタンエリア (非印刷) */}
             <div className="no-print flex flex-wrap justify-between items-center gap-2 mb-4">
               <div className="flex gap-3 items-center">
@@ -654,6 +780,12 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                 </button>
               </div>
               <div className="flex gap-2">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-[#093325] border border-[#E6DAA6] text-[#E6DAA6] font-bold px-3 py-2.5 rounded-full text-sm sm:text-base active:scale-95"
+                >
+                  📂 CSV読込
+                </button>
                 <button onClick={handleSaveCSV} className="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base">
                   💾 CSV保存
                 </button>
@@ -661,7 +793,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                   onClick={handlePrint}
                   className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-full text-sm sm:text-base text-center shadow-md active:scale-95"
                 >
-                  🖨️ 印刷 (印刷ダイアログ起動)
+                  🖨️️ 印刷 (印刷ダイアログ起動)
                 </button>
               </div>
             </div>
