@@ -5,18 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
   <title>シリアル記入シート - QuickScan DB</title>
-  <!-- React & ReactDOM (CDN) -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- jsQR (QRコード解析用ライブラリ) -->
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsQR@1.4.0/dist/jsQR.min.js"></script>
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    
     html, body, #root {
       width: 100%;
       height: 100%;
@@ -26,11 +21,9 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       overflow-x: hidden;
     }
-
     input, select, textarea {
       color-scheme: dark;
     }
-
     .app-container {
       min-height: 100dvh;
       height: 100dvh;
@@ -39,8 +32,6 @@
       display: flex;
       flex-direction: column;
     }
-
-    /* 印刷用CSS */
     @media print {
       body, #root {
         background: white !important;
@@ -84,212 +75,267 @@
   </style>
 </head>
 <body class="h-full">
-
   <div id="root" class="h-full"></div>
 
-  <script type="text/babel">
-    const { useState, useEffect, useRef, createContext, useContext } = React;
-
-    // --- 1. APIキー管理 Context ---
-    const ApiKeyContext = createContext();
-
-    const ApiKeyProvider = ({ children }) => {
-      const [apiKey, setApiKey] = useState(() => {
-        try { return localStorage.getItem('GEMINI_API_KEY') || ''; } catch(e) { return ''; }
-      });
-
-      const saveApiKey = (key) => {
-        setApiKey(key);
-        try { localStorage.setItem('GEMINI_API_KEY', key); } catch(e) {}
-      };
-
-      return (
-        <ApiKeyContext.Provider value={{ apiKey, saveApiKey }}>
-          {children}
-        </ApiKeyContext.Provider>
-      );
+  <script>
+    // --- アプリケーション状態管理 ---
+    const state = {
+      apiKey: localStorage.getItem('GEMINI_API_KEY') || '',
+      step: 0, // 0: TOP, 1~4: 固定ユニット, 5~: 各種機器, 999: プレビュー
+      baseInfo: {
+        docNo: '',
+        modelName: '',
+        entryDate: new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replaceAll('/', '/'),
+        customer: '',
+        unitNo: '',
+        orderQty: '',
+        elecStaff: ''
+      },
+      fixedUnits: [
+        { id: 'power', title: '電源ユニット', model: '', serial: '', remarks: '' },
+        { id: 'cpu', title: 'CPU', model: '', serial: '', remarks: '' },
+        { id: 'base', title: 'ベースユニット', model: '', serial: '', remarks: '' },
+        { id: 'lio', title: 'LIO-04', model: '', serial: '', remarks: '' }
+      ],
+      devicePacks: [
+        { id: 'device_1', title: '', model: '', serial: '', remarks: '' }
+      ],
+      ocrStatus: 'Status: 待機中',
+      isCamActive: false,
+      mediaStream: null
     };
 
-    const useApiKey = () => useContext(ApiKeyContext);
+    function saveState() {
+      try {
+        localStorage.setItem('GEMINI_API_KEY', state.apiKey);
+      } catch(e) {}
+    }
 
-    // --- 2. APIキー読み取り用 QRコードスキャナー ---
-    const ApiKeyQrScanner = ({ onScanSuccess, onClose }) => {
-      const videoRef = useRef(null);
-      const canvasRef = useRef(null);
-      const animFrameRef = useRef(null);
+    // --- メインレンダリング関数 ---
+    function render() {
+      const root = document.getElementById('root');
+      root.innerHTML = '';
 
-      useEffect(() => {
-        let stream = null;
+      if (state.step === 0) {
+        root.appendChild(renderHomeStep());
+      } else if (state.step >= 1 && state.step <= 4) {
+        root.appendChild(renderUnitStep(state.step - 1));
+      } else if (state.step >= 5 && state.step < 999) {
+        root.appendChild(renderDeviceStep(state.step - 5));
+      } else if (state.step === 999) {
+        root.appendChild(renderPreviewStep());
+      }
+    }
 
-        const startScan = async () => {
-          try {
-            stream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: 'environment' }
-            });
-            if (videoRef.current) {
-              videoRef.current.srcObject = stream;
-              videoRef.current.play();
-              animFrameRef.current = requestAnimationFrame(scanFrame);
-            }
-          } catch (err) {
-            alert('カメラの起動に失敗しました。');
-            onClose();
-          }
-        };
-
-        const scanFrame = () => {
-          const video = videoRef.current;
-          const canvas = canvasRef.current;
-          if (video && video.readyState === video.HAVE_ENOUGH_DATA && canvas) {
-            const ctx = canvas.getContext('2d');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-            const code = jsQR(imageData.data, imageData.width, imageData.height, {
-              inversionAttempts: 'dontInvert',
-            });
-
-            if (code && code.data) {
-              onScanSuccess(code.data.trim());
-              return;
-            }
-          }
-          animFrameRef.current = requestAnimationFrame(scanFrame);
-        };
-
-        startScan();
-
-        return () => {
-          if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-          if (stream) stream.getTracks().forEach(track => track.stop());
-        };
-      }, []);
-
-      return (
-        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4">
-          <div className="text-[#F5D887] text-lg font-bold mb-2">📷 APIキーのQRコードをかざしてください</div>
-          <div className="relative w-full max-w-sm h-64 bg-black rounded-xl overflow-hidden border-2 border-[#00ffcc] mb-4">
-            <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
-            <canvas ref={canvasRef} className="hidden" />
+    // --- STEP 0: ホーム画面 ---
+    function renderHomeStep() {
+      const div = document.createElement('div');
+      div.className = 'app-container max-w-xl mx-auto w-full px-4 justify-between';
+      div.innerHTML = `
+        <input type="file" id="csvFileInput" accept=".csv" class="hidden" />
+        <div class="w-full flex-1 flex flex-col justify-evenly py-2">
+          <div>
+            <h1 class="text-3xl font-extrabold text-center text-[#F5D887] mb-1">QuickScan DB</h1>
+            <p class="text-sm text-center text-[#E6DAA6]/80 mb-2 font-medium">基本情報設定</p>
           </div>
-          <button
-            onClick={onClose}
-            className="bg-gray-700 text-white font-bold px-6 py-3 rounded-full text-base"
-          >
-            キャンセル
-          </button>
+
+          <div class="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl mb-2 space-y-3">
+            <button id="loadCsvBtn" class="w-full bg-[#093325] border-2 border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base flex items-center justify-center gap-2 active:scale-95 shadow-md">
+              📂 保存済みCSVを読み込んで編集・追記
+            </button>
+            <div>
+              <label class="block text-sm font-bold text-[#F5D887] mb-1.5">🔑 APIキー設定 (任意)</label>
+              <div class="flex gap-1.5">
+                <input type="password" id="apiKeyInput" value="${state.apiKey}" placeholder="AIzaSy... (OCR利用時)" class="flex-1 bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
+                <button id="saveKeyBtn" class="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-xl text-base whitespace-nowrap active:scale-95">保存</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3">
+            <div>
+              <label class="block text-sm font-bold mb-1">製造指図書No</label>
+              <input type="text" id="docNoInput" value="${state.baseInfo.docNo}" placeholder="例: ORD-2026-X" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
+            </div>
+            <div>
+              <label class="block text-sm font-bold mb-1">機種名</label>
+              <input type="text" id="modelNameInput" value="${state.baseInfo.modelName}" placeholder="例: MODEL-A100" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
+            </div>
+            <div class="flex gap-2">
+              <div class="flex-1">
+                <label class="block text-sm font-bold mb-1">記入日</label>
+                <input type="text" value="${state.baseInfo.entryDate}" readonly class="w-full bg-[#042219]/50 border border-[#E6DAA6]/20 rounded-xl px-3 py-2.5 text-base opacity-70 font-mono" />
+              </div>
+              <div class="flex-1">
+                <label class="block text-sm font-bold mb-1">客先名</label>
+                <input type="text" id="customerInput" value="${state.baseInfo.customer}" placeholder="例: TANAKA" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <div class="flex-1">
+                <label class="block text-sm font-bold mb-1">号機No</label>
+                <input type="number" id="unitNoInput" value="${state.baseInfo.unitNo}" placeholder="1" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono" />
+              </div>
+              <div class="flex-1">
+                <label class="block text-sm font-bold mb-1">発注台数</label>
+                <input type="number" id="orderQtyInput" value="${state.baseInfo.orderQty}" placeholder="1" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono" />
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-bold mb-1">エレキ担当</label>
+              <input type="text" id="elecStaffInput" value="${state.baseInfo.elecStaff}" placeholder="例: YAMADA" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
+            </div>
+          </div>
         </div>
-      );
-    };
 
-    // --- 3. AI OCR カメラ・解析コンポーネント (gemini-1.5-flashを使用) ---
-    const OcrScannerCard = ({ onOcrSuccess }) => {
-      const { apiKey } = useApiKey();
-      const [isCamActive, setIsCamActive] = useState(false);
-      const [status, setStatus] = useState('Status: 待機中');
-      const videoRef = useRef(null);
-      const canvasRef = useRef(null);
-      const streamRef = useRef(null);
+        <div class="py-3">
+          <button id="startBtn" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-xl">入力を開始 (電源ユニットへ)</button>
+        </div>
+      `;
 
-      const startCamera = async () => {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-          });
-          streamRef.current = stream;
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.play();
+      // イベント設定
+      setTimeout(() => {
+        document.getElementById('saveKeyBtn').onclick = () => {
+          state.apiKey = document.getElementById('apiKeyInput').value.trim();
+          saveState();
+          alert('APIキーを保存しました');
+        };
+        document.getElementById('loadCsvBtn').onclick = () => document.getElementById('csvFileInput').click();
+        document.getElementById('csvFileInput').onchange = handleCSVLoad;
+
+        // 入力値バインド
+        ['docNo', 'modelName', 'customer', 'unitNo', 'orderQty', 'elecStaff'].forEach(field => {
+          const el = document.getElementById(field + 'Input');
+          if (el) {
+            el.oninput = (e) => { state.baseInfo[field] = e.target.value; };
           }
-          setIsCamActive(true);
-          setStatus('Status: 撮影準備完了');
-        } catch (e) {
-          alert('カメラの起動に失敗しました。');
+        });
+
+        document.getElementById('startBtn').onclick = () => { state.step = 1; render(); };
+      }, 0);
+
+      return div;
+    }
+
+    // --- STEP 1~4: 固定ユニット入力画面 ---
+    function renderUnitStep(uIndex) {
+      const current = state.fixedUnits[uIndex];
+      const totalSteps = 4 + state.devicePacks.length;
+      const div = document.createElement('div');
+      div.className = 'app-container max-w-xl mx-auto w-full px-4 justify-between';
+      div.innerHTML = `
+        <div class="w-full flex-1 flex flex-col justify-between py-1 overflow-y-auto">
+          <div>
+            <div class="flex justify-between text-base mb-1 text-[#E6DAA6]/90 font-bold">
+              <button id="prevBtn" class="hover:underline">← 前へ</button>
+              <span>${uIndex + 1} / ${totalSteps}</span>
+            </div>
+            <h2 class="text-2xl font-bold text-center text-[#F5D887] mb-2">${current.title} 画面</h2>
+          </div>
+
+          ${renderOcrCard(uIndex, 'fixed')}
+
+          <div class="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3">
+            <div>
+              <label class="block text-sm mb-1 font-bold">製品型式</label>
+              <input type="text" id="modelInput" value="${current.model}" placeholder="型式を入力" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1 font-bold">シリアルNo</label>
+              <input type="text" id="serialInput" value="${current.serial}" placeholder="シリアルを入力" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1 font-bold">備考</label>
+              <input type="text" id="remarksInput" value="${current.remarks}" placeholder="例: REV.A" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
+            </div>
+          </div>
+        </div>
+
+        <div class="py-3">
+          <button id="nextBtn" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-lg">次へ</button>
+        </div>
+      `;
+
+      setTimeout(() => {
+        setupOcrEvents(uIndex, 'fixed');
+        document.getElementById('prevBtn').onclick = () => { stopCamera(); state.step = Math.max(0, state.step - 1); render(); };
+        document.getElementById('nextBtn').onclick = () => { stopCamera(); state.step++; render(); };
+        document.getElementById('modelInput').oninput = (e) => { current.model = e.target.value; };
+        document.getElementById('serialInput').oninput = (e) => { current.serial = e.target.value; };
+        document.getElementById('remarksInput').oninput = (e) => { current.remarks = e.target.value; };
+      }, 0);
+
+      return div;
+    }
+
+    // --- STEP 5+: 各種機器入力画面 ---
+    function renderDeviceStep(sIndex) {
+      const current = state.devicePacks[sIndex];
+      const totalSteps = 4 + state.devicePacks.length;
+      const currentStepNo = 5 + sIndex;
+      const div = document.createElement('div');
+      div.className = 'app-container max-w-xl mx-auto w-full px-4 justify-between';
+      div.innerHTML = `
+        <div class="w-full flex-1 flex flex-col justify-between py-1 overflow-y-auto">
+          <div>
+            <div class="flex justify-between text-base mb-1 text-[#E6DAA6]/90 font-bold">
+              <button id="prevBtn" class="hover:underline">← 前へ</button>
+              <span>${currentStepNo} / ${totalSteps}</span>
+            </div>
+            <h2 class="text-2xl font-bold text-center text-[#F5D887] mb-2">各種機器 ${sIndex + 1} 画面</h2>
+          </div>
+
+          ${renderOcrCard(sIndex, 'device')}
+
+          <div class="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3">
+            <div>
+              <label class="block text-sm mb-1 font-bold">機器名称</label>
+              <input type="text" id="titleInput" value="${current.title}" placeholder="例: サーボパック" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
+            </div>
+            <div>
+              <label class="block text-sm mb-1 font-bold">製品型式</label>
+              <input type="text" id="modelInput" value="${current.model}" placeholder="型式を入力" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
+            </div>
+            <div>
+              <label class="block text-sm font-bold">シリアルNo</label>
+              <input type="text" id="serialInput" value="${current.serial}" placeholder="シリアルを入力" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
+            </div>
+          </div>
+
+          <div class="mt-2">
+            <button id="addDeviceBtn" class="w-full border border-dashed border-[#F5D887] text-[#F5D887] py-3 rounded-xl text-base font-bold bg-[#F5D887]/10">＋ 機器追加</button>
+          </div>
+        </div>
+
+        <div class="py-3 space-y-2">
+          ${sIndex < state.devicePacks.length - 1 ? `<button id="nextDeviceBtn" class="w-full bg-[#093325] border border-[#E6DAA6] text-[#E6DAA6] py-3 rounded-full text-base font-bold">次の各種機器へ</button>` : ''}
+          <button id="finishBtn" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-lg">入力結果へ (印刷プレビュー表示)</button>
+        </div>
+      `;
+
+      setTimeout(() => {
+        setupOcrEvents(sIndex, 'device');
+        document.getElementById('prevBtn').onclick = () => { stopCamera(); state.step = Math.max(0, state.step - 1); render(); };
+        document.getElementById('titleInput').oninput = (e) => { current.title = e.target.value; };
+        document.getElementById('modelInput').oninput = (e) => { current.model = e.target.value; };
+        document.getElementById('serialInput').oninput = (e) => { current.serial = e.target.value; };
+
+        document.getElementById('addDeviceBtn').onclick = () => {
+          stopCamera();
+          state.devicePacks.push({ id: 'device_' + Date.now(), title: '', model: '', serial: '', remarks: '' });
+          state.step = 4 + state.devicePacks.length;
+          render();
+        };
+
+        const nextDev = document.getElementById('nextDeviceBtn');
+        if (nextDev) {
+          nextDev.onclick = () => { stopCamera(); state.step++; render(); };
         }
-      };
 
-      const stopCamera = () => {
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => track.stop());
-          streamRef.current = null;
-        }
-        setIsCamActive(false);
-      };
+        document.getElementById('finishBtn').onclick = () => { stopCamera(); state.step = 999; render(); };
+      }, 0);
 
-      useEffect(() => {
-        return () => stopCamera();
-      }, []);
+      return div;
+    }
 
-      const captureAndAnalyze = async () => {
-        if (!apiKey) {
-          alert('APIキーが設定されていません。');
-          return;
-        }
-
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        if (!video || !canvas) return;
-
-        canvas.width = video.videoWidth || 1280;
-        canvas.height = video.videoHeight || 720;
-        canvas.getContext('2d').drawImage(video, 0, 0);
-
-        const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-        setStatus('Status: AI (Gemini 1.5) 解析中...');
-
-        const promptText = `添付された銘板画像から製品型式("model")、シリアル番号("sn")、およびバージョン・リビジョン・HW/FW情報("version")を抽出しJSON形式で出力してください。
-
-【抽出ルール】
-1. "model": メインの製品型式・型番（例: LIO-04, FMC-71, GD-275 等）。
-2. "sn": シリアル番号（S/N, SERIAL, 製造番号）。
-3. "version": バージョン、リビジョン、HW/FW/SW表記、または型式とは別で銘板に記載されている補助記号・数字（例: REV.A, Ver.1.0, FW1.02, A, 1.0 など）。
-   ※ただし、"model" や "sn" として抽出した文字列と全く同じものを重複して "version" に入れないでください。該当する情報が見当たらない場合のみ空文字 "" にしてください。
-
-JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
-
-        try {
-          // 安定性の高い gemini-1.5-flash エンドポイントに変更
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [
-                  { text: promptText },
-                  { inline_data: { mime_type: 'image/jpeg', data: base64 } }
-                ]
-              }]
-            })
-          });
-
-          const data = await res.json();
-          if (data.error) {
-            setStatus(`Status: エラー (${data.error.message})`);
-            return;
-          }
-
-          const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            setStatus('Status: 解析成功！');
-            onOcrSuccess({
-              model: parsed.model && parsed.model !== '未検出' ? parsed.model : '',
-              sn: parsed.sn && parsed.sn !== '未検出' ? parsed.sn : '',
-              version: parsed.version && parsed.version !== '未検出' ? parsed.version : ''
-            });
-          } else {
-            setStatus('Status: 解析失敗');
-          }
-        } catch (err) {
-          setStatus(`Status: 通信エラー (${err.message})`);
-        }
-      };
-
-      return (
-        <div className="bg-[#093325]/90 border border-[#E6DAA6]/30 p-3 sm:p-4 rounded-2xl text-center mb-3 w-full shadow-lg">
-          <div className="relative w-full h-48 sm:h-56 bg-black rounded-xl overflow-hidden flex items-center justify-center mb-3 border border-[#E6DAA6]/20">
-            <video ref={videoRef} playsInline muted className={`w-full h-full object-cover ${
+    // --- OCRカードHTML
