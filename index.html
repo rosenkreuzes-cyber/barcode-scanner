@@ -4,15 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB (銘板最適化・完全版)</title>
+  <title>シリアル記入シート - QuickScan DB</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- React & ReactDOM (CDN) -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <!-- Tesseract.js (ブラウザ完結型OCR) -->
+  <!-- Tesseract.js -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <!-- jsQR (QRコード解析用ライブラリ) -->
+  <!-- jsQR -->
   <script src="https://cdn.jsdelivr.net/npm/jsQR@1.4.0/dist/jsQR.min.js"></script>
 
   <style>
@@ -59,16 +59,14 @@
     try {
       const { useState, useEffect, useRef, createElement: h } = React;
 
-      // --- 銘板レイアウト最適化 OCRスキャナーコンポーネント ---
       function LabelOcrScannerCard({ onOcrSuccess, enableSplit = true }) {
         const [isCamActive, setIsCamActive] = useState(false);
-        const [status, setStatus] = useState(enableSplit ? 'Status: 待機中 (銘板3分割OCR)' : 'Status: 待機中 (通常OCR)');
+        const [status, setStatus] = useState(enableSplit ? 'Status: 待機中 (枠調整対応OCR)' : 'Status: 待機中 (通常OCR)');
         
-        // ご提示いただいた画像（水色:型式、黄色:シリアル、赤:Ver）の配置に合わせた初期座標
         const [boxes, setBoxes] = useState({
-          modelBox: { x: 4, y: 8, w: 92, h: 25, color: '#00ffcc', label: '①型式 (水色)' },
-          serialBox: { x: 4, y: 40, w: 60, h: 28, color: '#F5D887', label: '②シリアル (黄色)' },
-          verBox: { x: 67, y: 40, w: 29, h: 28, color: '#ff6b6b', label: '③Ver (赤)' }
+          modelBox: { x: 5, y: 8, w: 90, h: 25, color: '#00ffcc', label: '①型式 (水色)' },
+          serialBox: { x: 5, y: 38, w: 60, h: 28, color: '#F5D887', label: '②シリアル (黄色)' },
+          verBox: { x: 67, y: 38, w: 28, h: 28, color: '#ff6b6b', label: '③Ver (赤)' }
         });
 
         const containerRef = useRef(null);
@@ -89,7 +87,7 @@
               await videoRef.current.play().catch(() => {});
             }
             setIsCamActive(true);
-            setStatus('Status: 撮影準備完了 (枠はドラッグ＆リサイズ可能)');
+            setStatus('Status: 撮影準備完了 (枠をドラッグで移動・調整)');
           } catch (e) {
             setStatus('Status: カメラ起動エラー');
             alert('カメラの起動に失敗しました。');
@@ -127,7 +125,7 @@
                 target.x = Math.max(0, Math.min(100 - target.w, orig.x + dx));
                 target.y = Math.max(0, Math.min(100 - target.h, orig.y + dy));
               } else if (type === 'resize') {
-                target.w = Math.max(15, Math.min(100 - orig.x, orig.w + dx));
+                target.w = Math.max(10, Math.min(100 - orig.x, orig.w + dx));
                 target.h = Math.max(10, Math.min(100 - orig.y, orig.h + dy));
               }
               const nextBoxes = Object.assign({}, prev);
@@ -195,7 +193,7 @@
           if (!enableSplit) {
             setStatus('Status: OCR解析中...');
             try {
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
               const result = await Tesseract.recognize(dataUrl, 'eng+jpn');
               const rawText = result.data.text || '';
               setStatus('Status: 解析完了！');
@@ -216,7 +214,7 @@
             return;
           }
 
-          setStatus('Status: 銘板エリア解析中...');
+          setStatus('Status: 枠内を高精度解析中...');
 
           try {
             const cropImage = (box) => {
@@ -230,7 +228,7 @@
               subCanvas.width = sw;
               subCanvas.height = sh;
               subCtx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
-              return subCanvas.toDataURL('image/jpeg', 0.85);
+              return subCanvas.toDataURL('image/jpeg', 0.95);
             };
 
             const modelImg = cropImage(boxes.modelBox);
@@ -245,7 +243,6 @@
 
             const cleanText = (t) => (t || '').replace(/[\r\n]+/g, ' ').trim().toUpperCase();
 
-            // シリアル文字列から "S/N:" などのプレフィックスがあればきれいに整える
             let rawSerial = cleanText(resSerial.data.text);
             if (rawSerial.includes('S/N:')) {
               rawSerial = rawSerial.split('S/N:')[1].trim();
@@ -268,9 +265,9 @@
         return h('div', { className: 'bg-[#093325]/90 border border-[#E6DAA6]/30 p-3 sm:p-4 rounded-2xl text-center mb-3 w-full shadow-lg' },
           h('div', { 
             ref: containerRef,
-            className: 'relative w-full h-72 sm:h-80 bg-black rounded-xl overflow-hidden mb-3 border border-[#E6DAA6]/30 select-none touch-none'
+            className: 'relative w-full h-72 sm:h-80 bg-black rounded-xl overflow-hidden mb-3 border border-[#E6DAA6]/30 select-none touch-none flex items-center justify-center'
           },
-            h('video', { ref: videoRef, playsInline: true, muted: true, autoPlay: true, className: 'absolute inset-0 w-full h-full object-cover ' + (!isCamActive ? 'hidden' : '') }),
+            h('video', { ref: videoRef, playsInline: true, muted: true, autoPlay: true, className: 'absolute inset-0 w-full h-full object-contain ' + (!isCamActive ? 'hidden' : '') }),
             isCamActive && enableSplit && Object.entries(boxes).map(([key, box]) => {
               return h('div', {
                 key: key,
@@ -281,13 +278,13 @@
                   height: box.h + '%',
                   borderColor: box.color
                 },
-                className: 'absolute border-2 border-dashed rounded-lg bg-black/30 flex flex-col justify-between p-1 z-10 cursor-move shadow',
+                className: 'absolute border-2 border-dashed rounded-lg bg-black/40 flex flex-col justify-between p-1 z-10 cursor-move shadow-md',
                 onMouseDown: (e) => startInteraction(key, 'move', e),
                 onTouchStart: (e) => startInteraction(key, 'move', e)
               },
-                h('div', { className: 'flex justify-between items-center text-[10px] font-bold px-1 py-0.5 rounded', style: { color: box.color, backgroundColor: 'rgba(0,0,0,0.7)' } },
+                h('div', { className: 'flex justify-between items-center text-[10px] font-bold px-1 py-0.5 rounded', style: { color: box.color, backgroundColor: 'rgba(0,0,0,0.8)' } },
                   h('span', null, box.label),
-                  h('span', { className: 'text-[9px] opacity-80' }, '移動')
+                  h('span', { className: 'text-[9px] opacity-90' }, '移動')
                 ),
                 h('div', {
                   className: 'absolute bottom-0 right-0 w-6 h-6 bg-white/90 rounded-tl-lg cursor-se-resize flex items-center justify-center text-black font-bold text-[10px]',
@@ -309,7 +306,6 @@
         );
       }
 
-      // --- メインアプリケーションコンポーネント ---
       function MainApp() {
         const fileInputRef = useRef(null);
 
