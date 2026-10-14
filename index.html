@@ -94,11 +94,13 @@
     const ApiKeyContext = createContext();
 
     const ApiKeyProvider = ({ children }) => {
-      const [apiKey, setApiKey] = useState(() => localStorage.getItem('GEMINI_API_KEY') || '');
+      const [apiKey, setApiKey] = useState(() => {
+        try { return localStorage.getItem('GEMINI_API_KEY') || ''; } catch(e) { return ''; }
+      });
 
       const saveApiKey = (key) => {
         setApiKey(key);
-        localStorage.setItem('GEMINI_API_KEY', key);
+        try { localStorage.setItem('GEMINI_API_KEY', key); } catch(e) {}
       };
 
       return (
@@ -799,4 +801,74 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                 <table className="w-full text-xs sm:text-sm border-collapse border border-black mb-3">
                   <tbody>
                     <tr>
-                      <th className="border border-black p-1 bg
+                      <th className="border border-black p-1 bg-gray-100 w-[15%] text-left">製造指図書No</th>
+                      <td className="border border-black p-1 w-[35%] font-bold">{baseInfo.docNo}</td>
+                      <th className="border border-black p-1 bg-gray-100 w-[15%] text-left">客先名</th>
+                      <td className="border border-black p-1 w-[35%]">{baseInfo.customer}</td>
+                    </tr>
+                    <tr>
+                      <th className="border border-black p-1 bg-gray-100 text-left">機種名</th>
+                      <td className="border border-black p-1 font-bold">{baseInfo.modelName}</td>
+                      <th className="border border-black p-1 bg-gray-100 text-left">号機No</th>
+                      <td className="border border-black p-1">{baseInfo.unitNo}</td>
+                    </tr>
+                    <tr>
+                      <th className="border border-black p-1 bg-gray-100 text-left">記入日</th>
+                      <td className="border border-black p-1">{baseInfo.entryDate}</td>
+                      <th className="border border-black p-1 bg-gray-100 text-left">発注台数</th>
+                      <td className="border border-black p-1">{baseInfo.orderQty}</td>
+                    </tr>
+                    <tr>
+                      <th className="border border-black p-1 bg-gray-100 text-left" colSpan="2"></th>
+                      <th className="border border-black p-1 bg-gray-100 text-left">エレキ担当</th>
+                      <td className="border border-black p-1">{baseInfo.elecStaff}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <table className="w-full text-xs sm:text-sm border-collapse border border-black">
+                  <thead>
+                    <tr className="bg-gray-200 border-b border-black">
+                      <th className="border-r border-black p-1 text-center w-8">No</th>
+                      <th className="border-r border-black p-1 w-[28%]">製品型式</th>
+                      <th className="border-r border-black p-1 w-[28%]">シリアルNo</th>
+                      <th className="border-r border-black p-1 w-[16%]">機器名称</th>
+                      <th className="p-1 w-[28%]">備考</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, idx) => (
+                      <tr key={idx} className="border-b border-black h-5 sm:h-6">
+                        <td className="border-r border-black text-center font-bold bg-gray-50">{idx + 1}</td>
+                        <td className="border-r border-black px-1 text-sm sm:text-base font-bold print-large-text">{row.model}</td>
+                        <td className="border-r border-black px-1 text-sm sm:text-base font-bold print-large-text">{row.serial}</td>
+                        <td className="border-r border-black px-1 text-xs sm:text-sm">{row.title}</td>
+                        <td className="px-1 text-xs sm:text-sm">{row.remarks}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return null;
+    }
+
+    function App() {
+      return (
+        <ApiKeyProvider>
+          <MainApp />
+        </ApiKeyProvider>
+      );
+    }
+
+    const rootElement = document.getElementById('root');
+    if (rootElement) {
+      ReactDOM.createRoot(rootElement).render(<App />);
+    }
+  </script>
+</body>
+</html>
