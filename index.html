@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB (枠ドラッグ調整版)</title>
+  <title>シリアル記入シート - QuickScan DB (枠ドラッグ完全修復版)</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- React & ReactDOM (CDN) -->
@@ -97,15 +97,15 @@
     try {
       const { useState, useEffect, useRef } = React;
 
-      // --- 3分割エリア可変調整対応 OCRスキャナーコンポーネント ---
+      // --- 3分割エリア自由可変対応 OCRスキャナーコンポーネント ---
       const SplitOcrScannerCard = ({ onOcrSuccess, enableSplit = true }) => {
         const [isCamActive, setIsCamActive] = useState(false);
-        const [status, setStatus] = useState(enableSplit ? 'Status: 待機中 (枠調整対応3分割OCR)' : 'Status: 待機中 (通常OCR)');
+        const [status, setStatus] = useState(enableSplit ? 'Status: 待機中 (枠ドラッグ調整対応)' : 'Status: 待機中 (通常OCR)');
         
-        // 3分割エリアの高さ比率（合計が100%になるように管理、初期値は各33.3%）
+        // 3分割エリアの高さ比率パーセンテージ (top, mid, btm)
         const [splitRatio, setSplitRatio] = useState({ top: 33, mid: 34, btm: 33 });
         const containerRef = useRef(null);
-        const draggingRef = useRef(null); // 'top_divider' or 'btm_divider'
+        const draggingRef = useRef(null); // 'divider_1' or 'divider_2'
 
         const videoRef = useRef(null);
         const canvasRef = useRef(null);
@@ -123,7 +123,7 @@
               await videoRef.current.play().catch(() => {});
             }
             setIsCamActive(true);
-            setStatus('Status: 撮影準備完了（枠をドラッグして調整可能）');
+            setStatus('Status: 撮影準備完了（中央のハンドルをドラッグして枠調整）');
           } catch (e) {
             setStatus('Status: カメラ起動エラー');
             alert('カメラの起動に失敗しました。権限をご確認ください。');
@@ -146,54 +146,71 @@
           };
         }, []);
 
-        // ドラッグ操作による境界線位置のリアルタイム変更処理
-        const handleTouchMove = (e) => {
-          if (!draggingRef.current || !containerRef.current) return;
-          const rect = containerRef.current.getBoundingClientRect();
-          const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-          const offsetY = clientY - rect.top;
-          const percentage = Math.max(10, Math.min(90, (offsetY / rect.height) * 100));
+        // ドラッグ操作によるリアルタイム位置・サイズ変更
+        useEffect(() => {
+          const onMove = (e) => {
+            if (!draggingRef.current || !containerRef.current) return;
+            const rect = containerRef.current.getBoundingClientRect();
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const offsetY = clientY - rect.top;
+            const percentage = Math.max(10, Math.min(90, (offsetY / rect.height) * 100));
 
-          if (draggingRef.current === 'top_divider') {
-            if (percentage < splitRatio.top + splitRatio.mid - 10) {
-              const diff = percentage - splitRatio.top;
-              setSplitRatio(prev => ({
-                top: Math.max(10, prev.top + diff),
-                mid: Math.max(10, prev.mid - diff),
-                btm: prev.btm
-              }));
-            }
-          } else if (draggingRef.current === 'btm_divider') {
-            const boundaryTop = splitRatio.top;
-            if (percentage > boundaryTop + 10) {
-              const newMid = percentage - boundaryTop;
-              const newBtm = 100 - (boundaryTop + newMid);
-              if (newBtm >= 10) {
+            if (draggingRef.current === 'divider_1') {
+              // 1つ目の境界線（top と mid の間）を動かす
+              const maxTop = splitRatio.top + splitRatio.mid - 10;
+              if (percentage < maxTop && percentage > 10) {
+                const diff = percentage - splitRatio.top;
                 setSplitRatio(prev => ({
-                  top: prev.top,
-                  mid: newMid,
-                  btm: newBtm
+                  top: prev.top + diff,
+                  mid: prev.mid - diff,
+                  btm: prev.btm
                 }));
               }
+            } else if (draggingRef.current === 'divider_2') {
+              // 2つ目の境界線（mid と btm の間）を動かす
+              const minBtmLine = splitRatio.top + 10;
+              const maxBtmLine = 90;
+              if (percentage > minBtmLine && percentage < maxBtmLine) {
+                const newMid = percentage - splitRatio.top;
+                const newBtm = 100 - (splitRatio.top + newMid);
+                if (newBtm >= 10) {
+                  setSplitRatio(prev => ({
+                    top: prev.top,
+                    mid: newMid,
+                    btm: newBtm
+                  }));
+                }
+              }
             }
-          }
-        };
+          };
 
-        const handleTouchEnd = () => {
-          draggingRef.current = null;
-          window.removeEventListener('mousemove', handleTouchMove);
-          window.removeEventListener('mouseup', handleTouchEnd);
-          window.removeEventListener('touchmove', handleTouchMove);
-          window.removeEventListener('touchend', handleTouchEnd);
-        };
+          const onEnd = () => {
+            draggingRef.current = null;
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onEnd);
+            window.removeEventListener('touchmove', onMove);
+            window.removeEventListener('touchend', onEnd);
+          };
+
+          if (draggingRef.current) {
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+            window.addEventListener('touchmove', onMove, { passive: false });
+            window.addEventListener('touchend', onEnd);
+          }
+
+          return () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onEnd);
+            window.removeEventListener('touchmove', onMove);
+            window.removeEventListener('touchend', onEnd);
+          };
+        }, [splitRatio]);
 
         const startDragging = (dividerName, e) => {
           e.preventDefault();
+          e.stopPropagation();
           draggingRef.current = dividerName;
-          window.addEventListener('mousemove', handleTouchMove);
-          window.addEventListener('mouseup', handleTouchEnd);
-          window.addEventListener('touchmove', handleTouchMove, { passive: false });
-          window.addEventListener('touchend', handleTouchEnd);
         };
 
         const captureAndAnalyze = async () => {
@@ -239,7 +256,7 @@
             return;
           }
 
-          // --- 可変3分割クロップ解析 ---
+          // --- ユーザー設定された比率に基づき3分割クロップ解析 ---
           setStatus('Status: 指定エリア解析中...');
 
           try {
@@ -296,49 +313,47 @@
 
         return (
           <div className="bg-[#093325]/90 border border-[#E6DAA6]/30 p-3 sm:p-4 rounded-2xl text-center mb-3 w-full shadow-lg">
-            {/* プレビューおよび可変ガイド枠コンテナ */}
+            {/* プレビューコンテナ */}
             <div 
               ref={containerRef}
-              className="relative w-full h-64 sm:h-72 bg-black rounded-xl overflow-hidden flex flex-col mb-3 border border-[#E6DAA6]/20 select-none"
+              className="relative w-full h-72 sm:h-80 bg-black rounded-xl overflow-hidden flex flex-col mb-3 border border-[#E6DAA6]/30 select-none touch-none"
             >
               <video ref={videoRef} playsInline muted autoPlay className={`absolute inset-0 w-full h-full object-cover ${!isCamActive ? 'hidden' : ''}`} />
               
-              {/* 可変3分割ガイド枠表示 */}
+              {/* 可変3分割ガイド枠とドラッグハンドル */}
               {isCamActive && enableSplit && (
-                <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-1 z-10">
+                <div className="absolute inset-0 flex flex-col p-1 z-10 pointer-events-none">
                   {/* ① 型式エリア */}
-                  <div style={{ height: `${splitRatio.top}%` }} className="border-2 border-dashed border-[#00ffcc] rounded-md p-1 text-[10px] text-[#00ffcc] bg-black/40 font-bold overflow-hidden transition-all">
-                    ① 型式 ({Math.round(splitRatio.top)}%)
+                  <div style={{ height: `${splitRatio.top}%` }} className="border-2 border-dashed border-[#00ffcc] rounded-t-md p-1 text-[11px] text-[#00ffcc] bg-black/50 font-bold overflow-hidden">
+                    ① 型式枠 ({Math.round(splitRatio.top)}%)
                   </div>
 
-                  {/* 境界線1 (ドラッグ可能ハンドル) */}
+                  {/* 境界ハンドル 1 */}
                   <div 
-                    onMouseDown={(e) => startDragging('top_divider', e)}
-                    onTouchStart={(e) => startDragging('top_divider', e)}
-                    className="pointer-events-auto h-3 bg-[#00ffcc]/60 hover:bg-[#00ffcc] rounded cursor-row-resize flex items-center justify-center my-0.5"
-                    title="上下にドラッグしてサイズ調整"
+                    onMouseDown={(e) => startDragging('divider_1', e)}
+                    onTouchStart={(e) => startDragging('divider_1', e)}
+                    className="pointer-events-auto h-7 bg-[#00ffcc]/80 hover:bg-[#00ffcc] active:bg-white rounded flex items-center justify-center cursor-row-resize shadow-md my-0.5 border border-black"
                   >
-                    <div className="w-10 h-1 bg-white/80 rounded-full"></div>
+                    <span className="text-[10px] text-black font-extrabold tracking-widest">↕ 境界1をつまんで移動</span>
                   </div>
 
                   {/* ② シリアルエリア */}
-                  <div style={{ height: `${splitRatio.mid}%` }} className="border-2 border-dashed border-[#F5D887] rounded-md p-1 text-[10px] text-[#F5D887] bg-black/40 font-bold overflow-hidden transition-all">
-                    ② シリアル ({Math.round(splitRatio.mid)}%)
+                  <div style={{ height: `${splitRatio.mid}%` }} className="border-2 border-dashed border-[#F5D887] rounded-md p-1 text-[11px] text-[#F5D887] bg-black/50 font-bold overflow-hidden">
+                    ② シリアル枠 ({Math.round(splitRatio.mid)}%)
                   </div>
 
-                  {/* 境界線2 (ドラッグ可能ハンドル) */}
+                  {/* 境界ハンドル 2 */}
                   <div 
-                    onMouseDown={(e) => startDragging('btm_divider', e)}
-                    onTouchStart={(e) => startDragging('btm_divider', e)}
-                    className="pointer-events-auto h-3 bg-[#F5D887]/60 hover:bg-[#F5D887] rounded cursor-row-resize flex items-center justify-center my-0.5"
-                    title="上下にドラッグしてサイズ調整"
+                    onMouseDown={(e) => startDragging('divider_2', e)}
+                    onTouchStart={(e) => startDragging('divider_2', e)}
+                    className="pointer-events-auto h-7 bg-[#F5D887]/80 hover:bg-[#F5D887] active:bg-white rounded flex items-center justify-center cursor-row-resize shadow-md my-0.5 border border-black"
                   >
-                    <div className="w-10 h-1 bg-white/80 rounded-full"></div>
+                    <span className="text-[10px] text-black font-extrabold tracking-widest">↕ 境界2をつまんで移動</span>
                   </div>
 
                   {/* ③ 備考エリア */}
-                  <div style={{ height: `${splitRatio.btm}%` }} className="border-2 border-dashed border-[#ff9999] rounded-md p-1 text-[10px] text-[#ff9999] bg-black/40 font-bold overflow-hidden transition-all">
-                    ③ 備考 ({Math.round(splitRatio.btm)}%)
+                  <div style={{ height: `${splitRatio.btm}%` }} className="border-2 border-dashed border-[#ff9999] rounded-b-md p-1 text-[11px] text-[#ff9999] bg-black/50 font-bold overflow-hidden">
+                    ③ 備考枠 ({Math.round(splitRatio.btm)}%)
                   </div>
                 </div>
               )}
@@ -418,7 +433,6 @@
           window.print();
         };
 
-        // --- CSVファイル読込処理 ---
         const handleLoadCSV = (e) => {
           const file = e.target.files?.[0];
           if (!file) return;
@@ -514,7 +528,6 @@
           reader.readAsText(file, 'UTF-8');
         };
 
-        // --- CSVファイル保存処理 ---
         const handleSaveCSV = () => {
           const sanitize = (str) => (str || '').replace(/[/\\?%*:|"<>]/g, '_').toUpperCase();
           const filename = `${yymmdd}_${sanitize(baseInfo.modelName) || '機種名'}_${sanitize(baseInfo.docNo) || '指図書No'}_${sanitize(baseInfo.unitNo) || '号機'}.csv`;
@@ -562,7 +575,7 @@
               <div className="w-full flex-1 flex flex-col justify-evenly py-2">
                 <div>
                   <h1 className="text-3xl font-extrabold text-center text-[#F5D887] mb-1">QuickScan DB</h1>
-                  <p className="text-sm text-center text-[#E6DAA6]/80 mb-2 font-medium">✨ 枠ドラッグ調整対応・大文字版</p>
+                  <p className="text-sm text-center text-[#E6DAA6]/80 mb-2 font-medium">✨ 枠ドラッグ調整完全対応版</p>
                 </div>
 
                 <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl mb-2 space-y-3">
@@ -643,7 +656,7 @@
           );
         }
 
-        // --- STEP 1~4: 固定ユニット画面 (電源, CPU, ベース, LIO-04) → 可変3分割OCR有効 ---
+        // --- STEP 1~4: 固定ユニット画面 (電源, CPU, ベース, LIO-04) → 3分割OCR有効 ---
         if (step >= 1 && step <= 4) {
           const uIndex = step - 1;
           const current = fixedUnits[uIndex];
@@ -817,79 +830,4 @@
 
               <div className="overflow-x-auto w-full border border-gray-700/50 rounded-lg">
                 <div className="print-area bg-white text-black p-4 sm:p-6 rounded-lg shadow-xl min-w-[680px]">
-                  <h1 className="text-center font-bold text-xl sm:text-2xl mb-3 tracking-widest border-b-2 border-black pb-1">シリアル記入シート</h1>
-
-                  <table className="w-full text-xs sm:text-sm border-collapse border border-black mb-3">
-                    <tbody>
-                      <tr>
-                        <th className="border border-black p-1 bg-gray-100 w-[15%] text-left">製造指図書No</th>
-                        <td className="border border-black p-1 w-[35%] font-bold">{(baseInfo.docNo || '').toUpperCase()}</td>
-                        <th className="border border-black p-1 bg-gray-100 w-[15%] text-left">客先名</th>
-                        <td className="border border-black p-1 w-[35%]">{(baseInfo.customer || '').toUpperCase()}</td>
-                      </tr>
-                      <tr>
-                        <th className="border border-black p-1 bg-gray-100 text-left">機種名</th>
-                        <td className="border border-black p-1 font-bold">{(baseInfo.modelName || '').toUpperCase()}</td>
-                        <th className="border border-black p-1 bg-gray-100 text-left">号機No</th>
-                        <td className="border border-black p-1">{baseInfo.unitNo}</td>
-                      </tr>
-                      <tr>
-                        <th className="border border-black p-1 bg-gray-100 text-left">記入日</th>
-                        <td className="border border-black p-1">{baseInfo.entryDate}</td>
-                        <th className="border border-black p-1 bg-gray-100 text-left">発注台数</th>
-                        <td className="border border-black p-1">{baseInfo.orderQty}</td>
-                      </tr>
-                      <tr>
-                        <th className="border border-black p-1 bg-gray-100 text-left" colSpan="2"></th>
-                        <th className="border border-black p-1 bg-gray-100 text-left">エレキ担当</th>
-                        <td className="border border-black p-1">{(baseInfo.elecStaff || '').toUpperCase()}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-
-                  <table className="w-full text-xs sm:text-sm border-collapse border border-black">
-                    <thead>
-                      <tr className="bg-gray-200 border-b border-black">
-                        <th className="border-r border-black p-1 text-center w-8">No</th>
-                        <th className="border-r border-black p-1 w-[28%]">製品型式</th>
-                        <th className="border-r border-black p-1 w-[28%]">シリアルNo</th>
-                        <th className="border-r border-black p-1 w-[16%]">機器名称</th>
-                        <th className="p-1 w-[28%]">備考</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row, idx) => (
-                        <tr key={idx} className="border-b border-black h-5 sm:h-6">
-                          <td className="border-r border-black text-center font-bold bg-gray-50">{idx + 1}</td>
-                          <td className="border-r border-black px-1 text-sm sm:text-base font-bold print-large-text">{(row.model || '').toUpperCase()}</td>
-                          <td className="border-r border-black px-1 text-sm sm:text-base font-bold print-large-text">{(row.serial || '').toUpperCase()}</td>
-                          <td className="border-r border-black px-1 text-xs sm:text-sm">{(row.title || '').toUpperCase()}</td>
-                          <td className="px-1 text-xs sm:text-sm">{(row.remarks || '').toUpperCase()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          );
-        }
-
-        return null;
-      }
-
-      function App() {
-        return <MainApp />;
-      }
-
-      const rootElement = document.getElementById('root');
-      if (rootElement) {
-        ReactDOM.createRoot(rootElement).render(<App />);
-      }
-    } catch (err) {
-      console.error(err);
-      document.getElementById('root').innerHTML = `<div style="padding:20px; color:#ff6b6b; font-weight:bold; background:#042219; height:100vh; text-align:center;">エラーが発生しました。<br><br>${err.message}</div>`;
-    }
-  </script>
-</body>
-</html>
+                  <h1 className="text-center font-bold text-xl sm:text-2xl mb-3 tracking-widest border-b-2 border-black pb-1">シリアル記入
