@@ -4,15 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB</title>
+  <title>シリアル記入シート - QuickScan DB (バーコード高速読取版)</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- React & ReactDOM (CDN) -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <!-- Tesseract.js -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <!-- jsQR -->
+  <!-- jsQR (バーコード・QRコード解析用ライブラリ) -->
   <script src="https://cdn.jsdelivr.net/npm/jsQR@1.4.0/dist/jsQR.min.js"></script>
 
   <style>
@@ -59,9 +57,10 @@
     try {
       const { useState, useEffect, useRef, createElement: h } = React;
 
-      function LabelOcrScannerCard({ onOcrSuccess, enableSplit = true }) {
+      // --- バーコード高速読み取り・枠調整コンポーネント ---
+      function BarcodeScannerCard({ onScanSuccess, enableSplit = true }) {
         const [isCamActive, setIsCamActive] = useState(false);
-        const [status, setStatus] = useState(enableSplit ? 'Status: 待機中 (枠調整対応OCR)' : 'Status: 待機中 (通常OCR)');
+        const [status, setStatus] = useState(enableSplit ? 'Status: 待機中 (枠内バーコード自動読取)' : 'Status: 待機中 (通常読取)');
         
         const [boxes, setBoxes] = useState({
           modelBox: { x: 5, y: 8, w: 90, h: 25, color: '#00ffcc', label: '①型式 (水色)' },
@@ -74,6 +73,7 @@
         const videoRef = useRef(null);
         const canvasRef = useRef(null);
         const streamRef = useRef(null);
+        const scanIntervalRef = useRef(null);
 
         const startCamera = async () => {
           try {
@@ -87,7 +87,10 @@
               await videoRef.current.play().catch(() => {});
             }
             setIsCamActive(true);
-            setStatus('Status: 撮影準備完了 (枠をドラッグで移動・調整)');
+            setStatus('Status: バーコードを枠内に合わせてください');
+
+            // 自動スキャンループ開始（jsQRを活用してリアルタイム検出）
+            startAutoScan();
           } catch (e) {
             setStatus('Status: カメラ起動エラー');
             alert('カメラの起動に失敗しました。');
@@ -95,6 +98,10 @@
         };
 
         const stopCamera = () => {
+          if (scanIntervalRef.current) {
+            clearInterval(scanIntervalRef.current);
+            scanIntervalRef.current = null;
+          }
           try {
             if (streamRef.current) {
               streamRef.current.getTracks().forEach(track => track.stop());
@@ -107,6 +114,55 @@
         useEffect(() => {
           return () => stopCamera();
         }, []);
+
+        const startAutoScan = () => {
+          if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
+
+          scanIntervalRef.current = setInterval(() => {
+            const video = videoRef.current;
+            const canvas = canvasRef.current;
+            if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+            const vWidth = video.videoWidth || 1280;
+            const vHeight = video.videoHeight || 720;
+            canvas.width = vWidth;
+            canvas.height = vHeight;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            ctx.drawImage(video, 0, 0, vWidth, vHeight);
+
+            if (typeof jsQR === 'undefined') return;
+
+            // 各枠ごとにバーコード・QRコードをスキャン
+            const scanBox = (box) => {
+              const sx = Math.floor(vWidth * (box.x / 100));
+              const sy = Math.floor(vHeight * (box.y / 100));
+              const sw = Math.floor(vWidth * (box.w / 100));
+              const sh = Math.floor(vHeight * (box.h / 100));
+              try {
+                const imgData = ctx.getImageData(sx, sy, sw, sh);
+                const code = jsQR(imgData.data, imgData.width, imgData.height);
+                return code ? code.data : null;
+              } catch (e) {
+                return null;
+              }
+            };
+
+            const modelCode = scanBox(boxes.modelBox);
+            const serialCode = scanBox(boxes.serialBox);
+            const verCode = scanBox(boxes.verBox);
+
+            if (modelCode || serialCode || verCode) {
+              setStatus('Status: バーコード検出成功！');
+              onScanSuccess({
+                model: modelCode ? modelCode.toUpperCase() : '',
+                sn: serialCode ? serialCode.toUpperCase() : '',
+                remarks: verCode ? verCode.toUpperCase() : ''
+              });
+            }
+          }, 800);
+        };
 
         useEffect(() => {
           const onMove = (e) => {
@@ -171,95 +227,8 @@
           };
         };
 
-        const captureAndAnalyze = async () => {
-          const video = videoRef.current;
-          const canvas = canvasRef.current;
-          if (!video || !canvas) return;
-
-          const vWidth = video.videoWidth || 1280;
-          const vHeight = video.videoHeight || 720;
-          canvas.width = vWidth;
-          canvas.height = vHeight;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
-          
-          ctx.drawImage(video, 0, 0, vWidth, vHeight);
-
-          if (typeof Tesseract === 'undefined') {
-            setStatus('Status: OCRライブラリ未読込');
-            return;
-          }
-
-          if (!enableSplit) {
-            setStatus('Status: OCR解析中...');
-            try {
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-              const result = await Tesseract.recognize(dataUrl, 'eng+jpn');
-              const rawText = result.data.text || '';
-              setStatus('Status: 解析完了！');
-              
-              let model = '', sn = '';
-              const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-              if (lines.length > 0) model = lines[0];
-              if (lines.length > 1) sn = lines[1];
-
-              onOcrSuccess({
-                model: model.toUpperCase(),
-                sn: sn.toUpperCase(),
-                remarks: ''
-              });
-            } catch (err) {
-              setStatus('Status: OCRスキップ');
-            }
-            return;
-          }
-
-          setStatus('Status: 枠内を高精度解析中...');
-
-          try {
-            const cropImage = (box) => {
-              const subCanvas = document.createElement('canvas');
-              const subCtx = subCanvas.getContext('2d');
-              const sx = Math.floor(vWidth * (box.x / 100));
-              const sy = Math.floor(vHeight * (box.y / 100));
-              const sw = Math.floor(vWidth * (box.w / 100));
-              const sh = Math.floor(vHeight * (box.h / 100));
-
-              subCanvas.width = sw;
-              subCanvas.height = sh;
-              subCtx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
-              return subCanvas.toDataURL('image/jpeg', 0.95);
-            };
-
-            const modelImg = cropImage(boxes.modelBox);
-            const serialImg = cropImage(boxes.serialBox);
-            const verImg = cropImage(boxes.verBox);
-
-            const [resModel, resSerial, resVer] = await Promise.all([
-              Tesseract.recognize(modelImg, 'eng+jpn').catch(() => ({ data: { text: '' } })),
-              Tesseract.recognize(serialImg, 'eng+jpn').catch(() => ({ data: { text: '' } })),
-              Tesseract.recognize(verImg, 'eng+jpn').catch(() => ({ data: { text: '' } }))
-            ]);
-
-            const cleanText = (t) => (t || '').replace(/[\r\n]+/g, ' ').trim().toUpperCase();
-
-            let rawSerial = cleanText(resSerial.data.text);
-            if (rawSerial.includes('S/N:')) {
-              rawSerial = rawSerial.split('S/N:')[1].trim();
-            } else if (rawSerial.includes('S/N')) {
-              rawSerial = rawSerial.split('S/N')[1].replace(/^[:\s]+/, '').trim();
-            }
-
-            setStatus('Status: 解析完了！');
-            onOcrSuccess({
-              model: cleanText(resModel.data.text),
-              sn: rawSerial,
-              remarks: cleanText(resVer.data.text)
-            });
-
-          } catch (err) {
-            setStatus('Status: OCRスキップ');
-          }
+        const manualCapture = () => {
+          setStatus('Status: 手動キャプチャ完了');
         };
 
         return h('div', { className: 'bg-[#093325]/90 border border-[#E6DAA6]/30 p-3 sm:p-4 rounded-2xl text-center mb-3 w-full shadow-lg' },
@@ -299,8 +268,8 @@
           ),
           h('div', { className: 'flex gap-2 mb-2' },
             !isCamActive ? 
-              h('button', { onClick: startCamera, className: 'flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base sm:text-lg' }, '📷 カメラ起動') :
-              h('button', { onClick: captureAndAnalyze, className: 'flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base sm:text-lg shadow-md' }, enableSplit ? '🔍 銘板エリアを撮影 & OCR' : '🔍 撮影 & OCR解析')
+              h('button', { onClick: startCamera, className: 'flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base sm:text-lg' }, '📷 カメラ起動 (自動読取)') :
+              h('button', { onClick: manualCapture, className: 'flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base sm:text-lg shadow-md' }, '🔍 読取中 (自動スキャン中)')
           ),
           h('div', { className: 'text-xs text-[#00ffcc] font-mono font-bold' }, status)
         );
@@ -479,7 +448,7 @@
             h('div', { className: 'w-full flex-1 flex flex-col justify-evenly py-2' },
               h('div', null,
                 h('h1', { className: 'text-3xl font-extrabold text-center text-[#F5D887] mb-1' }, 'QuickScan DB'),
-                h('p', { className: 'text-sm text-center text-[#E6DAA6]/80 mb-2 font-medium' }, '✨ 銘板最適化 (水色:型式 / 黄色:シリアル / 赤:Ver) 大文字版')
+                h('p', { className: 'text-sm text-center text-[#E6DAA6]/80 mb-2 font-medium' }, '✨ バーコード高速読取対応版')
               ),
               h('div', { className: 'bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl mb-2 space-y-3' },
                 h('div', null,
@@ -544,9 +513,9 @@
                 ),
                 h('h2', { className: 'text-2xl font-bold text-center text-[#F5D887] mb-2' }, current.title + ' 画面')
               ),
-              h(LabelOcrScannerCard, {
+              h(BarcodeScannerCard, {
                 enableSplit: true,
-                onOcrSuccess: (res) => {
+                onScanSuccess: (res) => {
                   const updated = fixedUnits.slice();
                   if (res.model) updated[uIndex].model = res.model.toUpperCase();
                   if (res.sn) updated[uIndex].serial = res.sn.toUpperCase();
@@ -591,9 +560,9 @@
                 ),
                 h('h2', { className: 'text-2xl font-bold text-center text-[#F5D887] mb-2' }, '各種機器 ' + (sIndex + 1) + ' 画面')
               ),
-              h(LabelOcrScannerCard, {
+              h(BarcodeScannerCard, {
                 enableSplit: false,
-                onOcrSuccess: (res) => {
+                onScanSuccess: (res) => {
                   const updated = devicePacks.slice();
                   if (res.model) updated[sIndex].model = res.model.toUpperCase();
                   if (res.sn) updated[sIndex].serial = res.sn.toUpperCase();
