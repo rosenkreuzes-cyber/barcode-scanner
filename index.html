@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB</title>
+  <title>シリアル記入シート - QuickScan DB (ブラウザOCR版)</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- React & ReactDOM (CDN) -->
@@ -12,6 +12,8 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <!-- Babel (JSXコンパイル用) -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Tesseract.js (ブラウザ完結型OCR) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <!-- jsQR (QRコード解析用ライブラリ) -->
   <script src="https://cdn.jsdelivr.net/npm/jsQR@1.4.0/dist/jsQR.min.js"></script>
 
@@ -92,107 +94,12 @@
 
   <script type="text/babel">
     try {
-      const { useState, useEffect, useRef, createContext, useContext } = React;
+      const { useState, useEffect, useRef } = React;
 
-      // --- 1. APIキー管理 Context ---
-      const ApiKeyContext = createContext();
-
-      const ApiKeyProvider = ({ children }) => {
-        const [apiKey, setApiKey] = useState(() => {
-          try { return localStorage.getItem('GEMINI_API_KEY') || ''; } catch(e) { return ''; }
-        });
-
-        const saveApiKey = (key) => {
-          setApiKey(key);
-          try { localStorage.setItem('GEMINI_API_KEY', key); } catch(e) {}
-        };
-
-        return (
-          <ApiKeyContext.Provider value={{ apiKey, saveApiKey }}>
-            {children}
-          </ApiKeyContext.Provider>
-        );
-      };
-
-      const useApiKey = () => useContext(ApiKeyContext);
-
-      // --- 2. APIキー読み取り用 QRコードスキャナー ---
-      const ApiKeyQrScanner = ({ onScanSuccess, onClose }) => {
-        const videoRef = useRef(null);
-        const canvasRef = useRef(null);
-        const animFrameRef = useRef(null);
-
-        useEffect(() => {
-          let stream = null;
-
-          const startScan = async () => {
-            try {
-              stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' }
-              });
-              if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                videoRef.current.play();
-                animFrameRef.current = requestAnimationFrame(scanFrame);
-              }
-            } catch (err) {
-              alert('カメラの起動に失敗しました。');
-              onClose();
-            }
-          };
-
-          const scanFrame = () => {
-            const video = videoRef.current;
-            const canvas = canvasRef.current;
-            if (video && video.readyState === video.HAVE_ENOUGH_DATA && canvas) {
-              const ctx = canvas.getContext('2d');
-              canvas.width = video.videoWidth;
-              canvas.height = video.videoHeight;
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-              const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                inversionAttempts: 'dontInvert',
-              });
-
-              if (code && code.data) {
-                onScanSuccess(code.data.trim());
-                return;
-              }
-            }
-            animFrameRef.current = requestAnimationFrame(scanFrame);
-          };
-
-          startScan();
-
-          return () => {
-            if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-            if (stream) stream.getTracks().forEach(track => track.stop());
-          };
-        }, []);
-
-        return (
-          <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4">
-            <div className="text-[#F5D887] text-lg font-bold mb-2">📷 APIキーのQRコードをかざしてください</div>
-            <div className="relative w-full max-w-sm h-64 bg-black rounded-xl overflow-hidden border-2 border-[#00ffcc] mb-4">
-              <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
-              <canvas ref={canvasRef} className="hidden" />
-            </div>
-            <button
-              onClick={onClose}
-              className="bg-gray-700 text-white font-bold px-6 py-3 rounded-full text-base"
-            >
-              キャンセル
-            </button>
-          </div>
-        );
-      };
-
-      // --- 3. AI OCR カメラ・解析コンポーネント ---
-      const OcrScannerCard = ({ onOcrSuccess }) => {
-        const { apiKey } = useApiKey();
+      // --- ブラウザ完結型 OCR カメラ・解析コンポーネント (Tesseract.js使用) ---
+      const BrowserOcrScannerCard = ({ onOcrSuccess }) => {
         const [isCamActive, setIsCamActive] = useState(false);
-        const [status, setStatus] = useState('Status: 待機中 (混雑時は手動入力も可能です)');
+        const [status, setStatus] = useState('Status: 待機中 (完全オフライン対応)');
         const videoRef = useRef(null);
         const canvasRef = useRef(null);
         const streamRef = useRef(null);
@@ -227,11 +134,6 @@
         }, []);
 
         const captureAndAnalyze = async () => {
-          if (!apiKey) {
-            alert('APIキーが設定されていません。手動入力をご利用ください。');
-            return;
-          }
-
           const video = videoRef.current;
           const canvas = canvasRef.current;
           if (!video || !canvas) return;
@@ -240,55 +142,62 @@
           canvas.height = video.videoHeight || 720;
           canvas.getContext('2d').drawImage(video, 0, 0);
 
-          const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-          setStatus('Status: AI (Gemini 1.5) 解析中...');
-
-          const promptText = `添付された銘板画像から製品型式("model")、シリアル番号("sn")、およびバージョン・リビジョン・HW/FW情報("version")を抽出しJSON形式で出力してください。
-
-【抽出ルール】
-1. "model": メインの製品型式・型番（例: LIO-04, FMC-71, GD-275 等）。
-2. "sn": シリアル番号（S/N, SERIAL, 製造番号）。
-3. "version": バージョン、リビジョン、HW/FW/SW表記、または型式とは別で銘板に記載されている補助記号・数字（例: REV.A, Ver.1.0, FW1.02, A, 1.0 など）。
-   ※ただし、"model" や "sn" として抽出した文字列と全く同じものを重複して "version" に入れないでください。該当する情報が見当たらない場合のみ空文字 "" にしてください。
-
-JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
+          setStatus('Status: ブラウザ内OCR解析中 (Tesseract)...');
 
           try {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{
-                  parts: [
-                    { text: promptText },
-                    { inline_data: { mime_type: 'image/jpeg', data: base64 } }
-                  ]
-                }]
-              })
+            // 画像データを取得
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+            // Tesseract.jsによるブラウザ内OCR実行 (日本語・英語対応)
+            const result = await Tesseract.recognize(
+              dataUrl,
+              'eng+jpn',
+              {
+                logger: m => {
+                  if (m.status === 'recognizing text') {
+                    setStatus(`Status: 解析中... ${Math.round(m.progress * 100)}%`);
+                  }
+                }
+              }
+            );
+
+            const rawText = result.data.text || '';
+            setStatus('Status: 解析完了！');
+
+            // 抽出テキストからモデルやシリアル番号を簡易パースするロジック
+            let detectedModel = '';
+            let detectedSn = '';
+            let detectedVersion = '';
+
+            const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            
+            lines.forEach(line => {
+              const upper = line.toUpperCase();
+              if (upper.includes('S/N') || upper.includes('SERIAL') || upper.includes('製造番号')) {
+                const parts = line.split(/[:\s]+/);
+                if (parts.length > 1) detectedSn = parts[parts.length - 1];
+              }
+              if (upper.includes('REV') || upper.includes('VER')) {
+                detectedVersion = line;
+              }
             });
 
-            const data = await res.json();
-            if (data.error) {
-              setStatus(`Status: 混雑中エラー (手動入力をご利用ください)`);
-              return;
+            // 見つからなかった場合は最初の長めの文字列を型式・シリアル候補にする
+            if (!detectedModel && lines.length > 0) {
+              detectedModel = lines[0];
+            }
+            if (!detectedSn && lines.length > 1) {
+              detectedSn = lines[1];
             }
 
-            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+            onOcrSuccess({
+              model: detectedModel,
+              sn: detectedSn,
+              version: detectedVersion
+            });
 
-            if (jsonMatch) {
-              const parsed = JSON.parse(jsonMatch[0]);
-              setStatus('Status: 解析成功！');
-              onOcrSuccess({
-                model: parsed.model && parsed.model !== '未検出' ? parsed.model : '',
-                sn: parsed.sn && parsed.sn !== '未検出' ? parsed.sn : '',
-                version: parsed.version && parsed.version !== '未検出' ? parsed.version : ''
-              });
-            } else {
-              setStatus('Status: 解析失敗 (手動入力をご利用ください)');
-            }
           } catch (err) {
-            setStatus(`Status: 通信エラー (手動入力をご利用ください)`);
+            setStatus(`Status: OCR解析エラー (${err.message})`);
           }
         };
 
@@ -296,7 +205,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
           <div className="bg-[#093325]/90 border border-[#E6DAA6]/30 p-3 sm:p-4 rounded-2xl text-center mb-3 w-full shadow-lg">
             <div className="relative w-full h-48 sm:h-56 bg-black rounded-xl overflow-hidden flex items-center justify-center mb-3 border border-[#E6DAA6]/20">
               <video ref={videoRef} playsInline muted className={`w-full h-full object-cover ${!isCamActive ? 'hidden' : ''}`} />
-              {!isCamActive && <span className="text-base text-[#E6DAA6]/70">📷 カメラ停止中</span>}
+              {!isCamActive && <span className="text-base text-[#E6DAA6]/70">📷 カメラ停止中 (ブラウザOCR)</span>}
               <canvas ref={canvasRef} className="hidden" />
             </div>
 
@@ -304,7 +213,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
               {!isCamActive ? (
                 <button onClick={startCamera} className="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base sm:text-lg">📷 カメラ起動</button>
               ) : (
-                <button onClick={captureAndAnalyze} className="flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base sm:text-lg shadow-md">☁️ 撮影 & AI OCR解析</button>
+                <button onClick={captureAndAnalyze} className="flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base sm:text-lg shadow-md">🔍 撮影 & ブラウザOCR読取</button>
               )}
             </div>
             <div className="text-xs text-[#00ffcc] font-mono font-bold">{status}</div>
@@ -312,11 +221,8 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
         );
       };
 
-      // --- 4. メインアプリケーション ---
+      // --- メインアプリケーション ---
       function MainApp() {
-        const { apiKey, saveApiKey } = useApiKey();
-        const [inputKey, setInputKey] = useState(apiKey);
-        const [showQrScanner, setShowQrScanner] = useState(false);
         const fileInputRef = useRef(null);
 
         const now = new Date();
@@ -348,19 +254,6 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
         ]);
 
         const [step, setStep] = useState(0);
-
-        const handleSaveKey = () => {
-          if (!inputKey.trim()) return alert('APIキーを入力してください');
-          saveApiKey(inputKey.trim());
-          alert('APIキーを保存しました');
-        };
-
-        const handleQrScanSuccess = (scannedKey) => {
-          setShowQrScanner(false);
-          setInputKey(scannedKey);
-          saveApiKey(scannedKey);
-          alert('QRコードからAPIキーを読み込み・保存しました！');
-        };
 
         const handleNextFromHome = () => {
           setStep(1);
@@ -466,7 +359,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                 }
               }
 
-              alert('CSVファイルからデータを復元しました。\n各画面で未記載箇所の修正・追記が行えます。');
+              alert('CSVファイルからデータを復元しました。');
               if (fileInputRef.current) fileInputRef.current.value = '';
             } catch (err) {
               alert('CSVファイルの読み込みに失敗しました。');
@@ -512,13 +405,6 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
         if (step === 0) {
           return (
             <div className="app-container max-w-xl mx-auto w-full px-4 justify-between">
-              {showQrScanner && (
-                <ApiKeyQrScanner
-                  onScanSuccess={handleQrScanSuccess}
-                  onClose={() => setShowQrScanner(false)}
-                />
-              )}
-
               <input
                 type="file"
                 accept=".csv"
@@ -530,7 +416,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
               <div className="w-full flex-1 flex flex-col justify-evenly py-2">
                 <div>
                   <h1 className="text-3xl font-extrabold text-center text-[#F5D887] mb-1">QuickScan DB</h1>
-                  <p className="text-sm text-center text-[#E6DAA6]/80 mb-2 font-medium">基本情報設定</p>
+                  <p className="text-sm text-center text-[#E6DAA6]/80 mb-2 font-medium">ブラウザOCR版（オフライン対応）</p>
                 </div>
 
                 <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl mb-2 space-y-3">
@@ -541,31 +427,6 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                     >
                       📂 保存済みCSVを読み込んで編集・追記
                     </button>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-bold text-[#F5D887] mb-1.5">🔑 APIキー設定 (任意)</label>
-                    <div className="flex gap-1.5">
-                      <input
-                        type="password"
-                        value={inputKey}
-                        onChange={(e) => setInputKey(e.target.value)}
-                        placeholder="AIzaSy... (OCR利用時)"
-                        className="flex-1 bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base"
-                      />
-                      <button
-                        onClick={() => setShowQrScanner(true)}
-                        className="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-3 py-2.5 rounded-xl text-sm whitespace-nowrap active:scale-95"
-                      >
-                        📷 QR読取
-                      </button>
-                      <button
-                        onClick={handleSaveKey}
-                        className="bg-[#F5D887] text-[#042219] font-bold px-4 py-2.5 rounded-xl text-base whitespace-nowrap active:scale-95"
-                      >
-                        保存
-                      </button>
-                    </div>
                   </div>
                 </div>
 
@@ -652,7 +513,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                   <h2 className="text-2xl font-bold text-center text-[#F5D887] mb-2">{current.title} 画面</h2>
                 </div>
 
-                <OcrScannerCard onOcrSuccess={(res) => {
+                <BrowserOcrScannerCard onOcrSuccess={(res) => {
                   const updated = [...fixedUnits];
                   if (res.model) updated[uIndex].model = res.model;
                   if (res.sn) updated[uIndex].serial = res.sn;
@@ -699,7 +560,7 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                   <h2 className="text-2xl font-bold text-center text-[#F5D887] mb-2">各種機器 {sIndex + 1} 画面</h2>
                 </div>
 
-                <OcrScannerCard onOcrSuccess={(res) => {
+                <BrowserOcrScannerCard onOcrSuccess={(res) => {
                   const updated = [...devicePacks];
                   if (res.model) updated[sIndex].model = res.model;
                   if (res.sn) updated[sIndex].serial = res.sn;
@@ -808,8 +669,70 @@ JSON形式例: {"model": "...", "sn": "...", "version": "..."}`;
                         <th className="border border-black p-1 bg-gray-100 w-[15%] text-left">製造指図書No</th>
                         <td className="border border-black p-1 w-[35%] font-bold">{baseInfo.docNo}</td>
                         <th className="border border-black p-1 bg-gray-100 w-[15%] text-left">客先名</th>
-                        <td className="border border-black p-1 w-[35%]">{baseInfo.customer}</td>
+                        <td className="border border-black p-1 w-[35%]" className="border border-black p-1 w-[35%]">{baseInfo.customer}</td>
                       </tr>
                       <tr>
                         <th className="border border-black p-1 bg-gray-100 text-left">機種名</th>
-                        <td className="border border-black p-1 font-
+                        <td className="border border-black p-1 font-bold">{baseInfo.modelName}</td>
+                        <th className="border border-black p-1 bg-gray-100 text-left">号機No</th>
+                        <td className="border border-black p-1">{baseInfo.unitNo}</td>
+                      </tr>
+                      <tr>
+                        <th className="border border-black p-1 bg-gray-100 text-left">記入日</th>
+                        <td className="border border-black p-1">{baseInfo.entryDate}</td>
+                        <th className="border border-black p-1 bg-gray-100 text-left">発注台数</th>
+                        <td className="border border-black p-1">{baseInfo.orderQty}</td>
+                      </tr>
+                      <tr>
+                        <th className="border border-black p-1 bg-gray-100 text-left" colSpan="2"></th>
+                        <th className="border border-black p-1 bg-gray-100 text-left">エレキ担当</th>
+                        <td className="border border-black p-1">{baseInfo.elecStaff}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <table className="w-full text-xs sm:text-sm border-collapse border border-black">
+                    <thead>
+                      <tr className="bg-gray-200 border-b border-black">
+                        <th className="border-r border-black p-1 text-center w-8">No</th>
+                        <th className="border-r border-black p-1 w-[28%]">製品型式</th>
+                        <th className="border-r border-black p-1 w-[28%]">シリアルNo</th>
+                        <th className="border-r border-black p-1 w-[16%]">機器名称</th>
+                        <th className="p-1 w-[28%]">備考</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row, idx) => (
+                        <tr key={idx} className="border-b border-black h-5 sm:h-6">
+                          <td className="border-r border-black text-center font-bold bg-gray-50">{idx + 1}</td>
+                          <td className="border-r border-black px-1 text-sm sm:text-base font-bold print-large-text">{row.model}</td>
+                          <td className="border-r border-black px-1 text-sm sm:text-base font-bold print-large-text">{row.serial}</td>
+                          <td className="border-r border-black px-1 text-xs sm:text-sm">{row.title}</td>
+                          <td className="px-1 text-xs sm:text-sm">{row.remarks}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        return null;
+      }
+
+      function App() {
+        return <MainApp />;
+      }
+
+      const rootElement = document.getElementById('root');
+      if (rootElement) {
+        ReactDOM.createRoot(rootElement).render(<App />);
+      }
+    } catch (err) {
+      document.getElementById('root').innerHTML = `<div style="padding:20px; color:#ff6b6b; font-weight:bold;">アプリの初期化エラーが発生しました: ${err.message}</div>`;
+    }
+  </script>
+</body>
+</html>
