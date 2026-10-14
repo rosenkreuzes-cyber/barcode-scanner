@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB (完全網羅版)</title>
+  <title>シリアル記入シート - QuickScan DB (完全網羅・3分割OCR版)</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- React & ReactDOM (CDN) -->
@@ -89,14 +89,14 @@
 <body class="h-full">
 
   <div id="root" class="h-full flex items-center justify-center">
-    <div style="color: #E6DAA6; font-size: 18px; font-weight: bold;">読み込み中...</div>
+    <div style="color: #E6DAA6; font-size: 18px; font-weight: bold;">システム起動中...</div>
   </div>
 
   <script type="text/babel">
     try {
       const { useState, useEffect, useRef } = React;
 
-      // --- OCR スキャナーコンポーネント (3分割指定対応) ---
+      // --- OCRスキャナーコンポーネント (3分割指定対応 & グリーンバック防止) ---
       const SplitOcrScannerCard = ({ onOcrSuccess, enableSplit = true }) => {
         const [isCamActive, setIsCamActive] = useState(false);
         const [status, setStatus] = useState(enableSplit ? 'Status: 待機中 (3分割OCR)' : 'Status: 待機中 (通常OCR)');
@@ -106,31 +106,37 @@
 
         const startCamera = async () => {
           try {
+            setStatus('Status: カメラ起動中...');
             const stream = await navigator.mediaDevices.getUserMedia({
               video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
             });
             streamRef.current = stream;
             if (videoRef.current) {
               videoRef.current.srcObject = stream;
-              videoRef.current.play();
+              await videoRef.current.play().catch(() => {});
             }
             setIsCamActive(true);
             setStatus('Status: 撮影準備完了');
           } catch (e) {
-            alert('カメラの起動に失敗しました。');
+            setStatus('Status: カメラ起動エラー');
+            alert('カメラの起動に失敗しました。権限をご確認ください。');
           }
         };
 
         const stopCamera = () => {
-          if (streamRef.current) {
-            streamRef.current.getTracks().forEach(track => track.stop());
-            streamRef.current = null;
-          }
+          try {
+            if (streamRef.current) {
+              streamRef.current.getTracks().forEach(track => track.stop());
+              streamRef.current = null;
+            }
+          } catch (e) {}
           setIsCamActive(false);
         };
 
         useEffect(() => {
-          return () => stopCamera();
+          return () => {
+            stopCamera();
+          };
         }, []);
 
         const captureAndAnalyze = async () => {
@@ -143,13 +149,15 @@
           canvas.width = vWidth;
           canvas.height = vHeight;
           const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          
           ctx.drawImage(video, 0, 0, vWidth, vHeight);
 
           if (!enableSplit) {
-            // 通常全体OCR（各種機器画面用）
+            // 各種機器画面用（全体OCR）
             setStatus('Status: OCR解析中...');
             try {
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
               const result = await Tesseract.recognize(dataUrl, 'eng+jpn');
               const rawText = result.data.text || '';
               setStatus('Status: 解析完了！');
@@ -161,42 +169,43 @@
 
               onOcrSuccess({ model, sn, remarks: '' });
             } catch (err) {
-              setStatus(`Status: エラー (${err.message})`);
+              setStatus(`Status: エラー (${err.message || '不明'})`);
             }
             return;
           }
 
           // --- 固定ユニット画面用：3分割クロップ解析 ---
-          setStatus('Status: 3分割エリアを解析中 (型式/SN/備考)...');
+          setStatus('Status: 3分割エリアを解析中...');
 
           try {
             const subCanvas = document.createElement('canvas');
             const subCtx = subCanvas.getContext('2d');
+            if (!subCtx) return;
 
             // 1. 上段エリア（製品型式）
             subCanvas.width = vWidth;
             subCanvas.height = Math.floor(vHeight * 0.35);
             subCtx.drawImage(canvas, 0, 0, vWidth, subCanvas.height, 0, 0, subCanvas.width, subCanvas.height);
-            const modelImg = subCanvas.toDataURL('image/jpeg', 0.9);
+            const modelImg = subCanvas.toDataURL('image/jpeg', 0.85);
 
             // 2. 中段エリア（シリアルNo）
             subCanvas.width = vWidth;
             subCanvas.height = Math.floor(vHeight * 0.35);
             subCtx.clearRect(0, 0, subCanvas.width, subCanvas.height);
             subCtx.drawImage(canvas, 0, Math.floor(vHeight * 0.33), vWidth, subCanvas.height, 0, 0, subCanvas.width, subCanvas.height);
-            const snImg = subCanvas.toDataURL('image/jpeg', 0.9);
+            const snImg = subCanvas.toDataURL('image/jpeg', 0.85);
 
             // 3. 下段エリア（備考・バージョン）
             subCanvas.width = vWidth;
             subCanvas.height = Math.floor(vHeight * 0.34);
             subCtx.clearRect(0, 0, subCanvas.width, subCanvas.height);
             subCtx.drawImage(canvas, 0, Math.floor(vHeight * 0.66), vWidth, subCanvas.height, 0, 0, subCanvas.width, subCanvas.height);
-            const remImg = subCanvas.toDataURL('image/jpeg', 0.9);
+            const remImg = subCanvas.toDataURL('image/jpeg', 0.85);
 
             const [resModel, resSn, resRem] = await Promise.all([
-              Tesseract.recognize(modelImg, 'eng+jpn'),
-              Tesseract.recognize(snImg, 'eng+jpn'),
-              Tesseract.recognize(remImg, 'eng+jpn')
+              Tesseract.recognize(modelImg, 'eng+jpn').catch(() => ({ data: { text: '' } })),
+              Tesseract.recognize(snImg, 'eng+jpn').catch(() => ({ data: { text: '' } })),
+              Tesseract.recognize(remImg, 'eng+jpn').catch(() => ({ data: { text: '' } }))
             ]);
 
             const cleanText = (t) => (t || '').replace(/[\r\n]+/g, ' ').trim();
@@ -209,20 +218,20 @@
             });
 
           } catch (err) {
-            setStatus(`Status: 3分割OCR解析エラー (${err.message})`);
+            setStatus(`Status: 3分割OCRエラー (${err.message || '不明'})`);
           }
         };
 
         return (
           <div className="bg-[#093325]/90 border border-[#E6DAA6]/30 p-3 sm:p-4 rounded-2xl text-center mb-3 w-full shadow-lg">
             <div className="relative w-full h-56 sm:h-64 bg-black rounded-xl overflow-hidden flex items-center justify-center mb-3 border border-[#E6DAA6]/20">
-              <video ref={videoRef} playsInline muted className={`w-full h-full object-cover ${!isCamActive ? 'hidden' : ''}`} />
+              <video ref={videoRef} playsInline muted autoPlay className={`w-full h-full object-cover ${!isCamActive ? 'hidden' : ''}`} />
               
               {isCamActive && enableSplit && (
                 <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-2">
-                  <div className="border-2 border-dashed border-[#00ffcc] rounded-lg p-1 text-[10px] text-[#00ffcc] bg-black/40 font-bold">① 型式エリア</div>
-                  <div className="border-2 border-dashed border-[#F5D887] rounded-lg p-1 text-[10px] text-[#F5D887] bg-black/40 font-bold">② シリアルエリア</div>
-                  <div className="border-2 border-dashed border-[#ff9999] rounded-lg p-1 text-[10px] text-[#ff9999] bg-black/40 font-bold">③ 備考・バージョンエリア</div>
+                  <div className="border-2 border-dashed border-[#00ffcc] rounded-lg p-1 text-[10px] text-[#00ffcc] bg-black/50 font-bold">① 型式エリア</div>
+                  <div className="border-2 border-dashed border-[#F5D887] rounded-lg p-1 text-[10px] text-[#F5D887] bg-black/50 font-bold">② シリアルエリア</div>
+                  <div className="border-2 border-dashed border-[#ff9999] rounded-lg p-1 text-[10px] text-[#ff9999] bg-black/50 font-bold">③ 備考・バージョンエリア</div>
                 </div>
               )}
 
@@ -282,7 +291,7 @@
           setStep(1);
         };
 
-        // 機器追加処理（LIO-04画面および各種機器画面から呼び出し可能）
+        // 機器追加（LIO-04画面および各種機器画面から呼び出し可能）
         const handleAddDevice = () => {
           const nextIndex = devicePacks.length + 1;
           setDevicePacks([
@@ -342,177 +351,3 @@
                   { id: 'base', title: 'ベースユニット', model: '', serial: '', remarks: '' },
                   { id: 'lio', title: 'LIO-04', model: '', serial: '', remarks: '' }
                 ];
-                let newDevices = [];
-
-                itemLines.forEach((line, idx) => {
-                  if (idx >= 25) return;
-                  const match = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
-                  const cols = match ? match.map(clean) : [];
-                  
-                  const no = parseInt(cols[0], 10);
-                  if (isNaN(no)) return;
-
-                  const model = cols[1] || '';
-                  const serial = cols[2] || '';
-                  const title = cols[3] || '';
-                  const remarks = cols[4] || '';
-
-                  if (no >= 1 && no <= 4) {
-                    newFixed[no - 1].model = model;
-                    newFixed[no - 1].serial = serial;
-                    newFixed[no - 1].remarks = remarks;
-                  } else if (no >= 5) {
-                    if (model || serial || title || remarks || newDevices.length > 0) {
-                      newDevices.push({
-                        id: `device_${Date.now()}_${no}`,
-                        title: title,
-                        model: model,
-                        serial: serial,
-                        remarks: remarks
-                      });
-                    }
-                  }
-                });
-
-                setFixedUnits(newFixed);
-                if (newDevices.length > 0) {
-                  setDevicePacks(newDevices);
-                } else {
-                  setDevicePacks([{ id: 'device_1', title: '', model: '', serial: '', remarks: '' }]);
-                }
-              }
-
-              alert('CSVファイルからデータを復元しました。');
-              if (fileInputRef.current) fileInputRef.current.value = '';
-            } catch (err) {
-              alert('CSVファイルの読み込みに失敗しました。');
-            }
-          };
-
-          reader.readAsText(file, 'UTF-8');
-        };
-
-        // --- CSVファイル保存処理 ---
-        const handleSaveCSV = () => {
-          const sanitize = (str) => (str || '').replace(/[/\\?%*:|"<>]/g, '_');
-          const filename = `${yymmdd}_${sanitize(baseInfo.modelName) || '機種名'}_${sanitize(baseInfo.docNo) || '指図書No'}_${sanitize(baseInfo.unitNo) || '号機'}.csv`;
-
-          let csvContent = "\uFEFF";
-          csvContent += `製造指図書No,${baseInfo.docNo},客先名,${baseInfo.customer}\n`;
-          csvContent += `機種名,${baseInfo.modelName},号機No,${baseInfo.unitNo}\n`;
-          csvContent += `記入日,${baseInfo.entryDate},発注台数,${baseInfo.orderQty}\n`;
-          csvContent += `,,エレキ担当,${baseInfo.elecStaff}\n\n`;
-          csvContent += `No,製品型式,シリアルNo,機器名称,備考\n`;
-
-          const allItems = [
-            ...fixedUnits.map(u => ({ model: u.model, serial: u.serial, title: u.title, remarks: u.remarks })),
-            ...devicePacks.map(s => ({ model: s.model, serial: s.serial, title: s.title, remarks: s.remarks }))
-          ];
-
-          for (let i = 1; i <= 25; i++) {
-            const item = allItems[i - 1] || {};
-            csvContent += `${i},"${item.model || ''}","${item.serial || ''}","${item.title || ''}","${item.remarks || ''}"\n`;
-          }
-
-          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        };
-
-        // --- STEP 0: 初期画面 ---
-        if (step === 0) {
-          return (
-            <div className="app-container max-w-xl mx-auto w-full px-4 justify-between">
-              <input
-                type="file"
-                accept=".csv"
-                ref={fileInputRef}
-                onChange={handleLoadCSV}
-                className="hidden"
-              />
-
-              <div className="w-full flex-1 flex flex-col justify-evenly py-2">
-                <div>
-                  <h1 className="text-3xl font-extrabold text-center text-[#F5D887] mb-1">QuickScan DB</h1>
-                  <p className="text-sm text-center text-[#E6DAA6]/80 mb-2 font-medium">✨ 完全網羅・3分割OCR対応版</p>
-                </div>
-
-                <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl mb-2 space-y-3">
-                  <div>
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full bg-[#093325] border-2 border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base flex items-center justify-center gap-2 active:scale-95 shadow-md"
-                    >
-                      📂 保存済みCSVを読み込んで編集・追記
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-[#093325]/80 border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3">
-                  <div>
-                    <label className="block text-sm font-bold mb-1">製造指図書No</label>
-                    <input
-                      type="text"
-                      value={baseInfo.docNo}
-                      onChange={(e) => setBaseInfo({...baseInfo, docNo: e.target.value})}
-                      placeholder="例: ORD-2026-X"
-                      className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold mb-1">機種名</label>
-                    <input
-                      type="text"
-                      value={baseInfo.modelName}
-                      onChange={(e) => setBaseInfo({...baseInfo, modelName: e.target.value})}
-                      placeholder="例: MODEL-A100"
-                      className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="block text-sm font-bold mb-1">記入日 (自動)</label>
-                      <input type="text" value={baseInfo.entryDate} readOnly className="w-full bg-[#042219]/50 border border-[#E6DAA6]/20 rounded-xl px-3 py-2.5 text-base opacity-70 font-mono" />
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-bold mb-1">客先名</label>
-                      <input type="text" value={baseInfo.customer} onChange={(e) => setBaseInfo({...baseInfo, customer: e.target.value})} placeholder="例: TANAKA" className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="block text-sm font-bold mb-1">号機No (数値)</label>
-                      <input
-                        type="number"
-                        value={baseInfo.unitNo}
-                        onChange={(e) => setBaseInfo({...baseInfo, unitNo: e.target.value})}
-                        placeholder="1"
-                        className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-bold mb-1">発注台数 (数値)</label>
-                      <input
-                        type="number"
-                        value={baseInfo.orderQty}
-                        onChange={(e) => setBaseInfo({...baseInfo, orderQty: e.target.value})}
-                        placeholder="1"
-                        className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base font-mono"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold mb-1">エレキ担当</label>
-                    <input type="text" value={baseInfo.elecStaff} onChange={(e) => setBaseInfo({...baseInfo, elecStaff: e.target.value})} placeholder="例: YAMADA" className="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="py-3">
-                <button
