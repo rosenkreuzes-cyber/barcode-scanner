@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB (完全網羅・1ページ印刷最適化版)</title>
+  <title>シリアル記入シート - QuickScan DB (1ページ完全収容版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -18,7 +18,7 @@
     }
     input { color-scheme: dark; text-transform: uppercase; }
 
-    /* A4 1ページに収めるための厳格な印刷・プレビュー設定 (iPhone対応) */
+    /* iPhone/スマホ完全対応・A4縦1ページ強制収容設定 */
     @media print {
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       html, body {
@@ -26,7 +26,7 @@
         color: black !important;
         width: 100% !important;
         height: 100% !important;
-        font-size: 9px !important;
+        font-size: 7.5px !important;
       }
       .no-print { display: none !important; }
       .print-area {
@@ -34,7 +34,7 @@
         width: 100% !important;
         max-width: 100% !important;
         margin: 0 !important;
-        padding: 0 !important;
+        padding: 2mm !important;
         box-shadow: none !important;
         overflow: visible !important;
         background: white !important;
@@ -46,9 +46,9 @@
       }
       th, td {
         border: 1px solid #000 !important;
-        padding: 2px 4px !important;
-        font-size: 9px !important;
-        line-height: 1.1 !important;
+        padding: 1.5px 3px !important;
+        font-size: 7.5px !important;
+        line-height: 1.0 !important;
         color: black !important;
         white-space: nowrap;
         overflow: hidden;
@@ -57,7 +57,7 @@
       th { background-color: #f2f2f2 !important; }
       @page {
         size: A4 portrait;
-        margin: 5mm;
+        margin: 4mm;
       }
     }
   </style>
@@ -178,45 +178,45 @@
       </div>
     </div>
 
-    <!-- スマホ画面からはみ出さないようレスポンシブ対応＆1ページ収容コンテナ -->
-    <div class="print-area bg-white text-black p-3 rounded-lg shadow-xl w-full overflow-x-auto">
-      <h1 class="text-center font-bold text-lg mb-2 border-b-2 border-black pb-1">シリアル記入シート</h1>
-      <table class="w-full text-[11px] border-collapse border border-black mb-2">
+    <!-- スマホ画面からはみ出さないようラップしつつ、印刷時は完全に1ページ幅に強制フィット -->
+    <div class="print-area bg-white text-black p-2 rounded-lg shadow-xl w-full max-w-full overflow-hidden">
+      <h1 class="text-center font-bold text-base mb-1.5 border-b-2 border-black pb-0.5">シリアル記入シート</h1>
+      <table class="w-full text-[10px] border-collapse border border-black mb-1.5 table-fixed">
         <tbody>
           <tr>
-            <th class="border border-black p-1 bg-gray-100 w-24">製造指図書No</th>
-            <td id="p-docNo" class="border border-black p-1 font-bold"></td>
-            <th class="border border-black p-1 bg-gray-100 w-16">客先名</th>
-            <td id="p-customer" class="border border-black p-1"></td>
+            <th class="border border-black p-1 bg-gray-100 w-20">製造指図書No</th>
+            <td id="p-docNo" class="border border-black p-1 font-bold truncate"></td>
+            <th class="border border-black p-1 bg-gray-100 w-14">客先名</th>
+            <td id="p-customer" class="border border-black p-1 truncate"></td>
           </tr>
           <tr>
             <th class="border border-black p-1 bg-gray-100">機種名</th>
-            <td id="p-modelName" class="border border-black p-1 font-bold"></td>
+            <td id="p-modelName" class="border border-black p-1 font-bold truncate"></td>
             <th class="border border-black p-1 bg-gray-100">号機No</th>
-            <td id="p-unitNo" class="border border-black p-1"></td>
+            <td id="p-unitNo" class="border border-black p-1 truncate"></td>
           </tr>
           <tr>
             <th class="border border-black p-1 bg-gray-100">記入日</th>
-            <td id="p-entryDate" class="border border-black p-1"></td>
+            <td id="p-entryDate" class="border border-black p-1 truncate"></td>
             <th class="border border-black p-1 bg-gray-100">発注台数</th>
-            <td id="p-orderQty" class="border border-black p-1"></td>
+            <td id="p-orderQty" class="border border-black p-1 truncate"></td>
           </tr>
           <tr>
             <th class="border border-black p-1 bg-gray-100" colspan="2"></th>
             <th class="border border-black p-1 bg-gray-100">エレキ担当</th>
-            <td id="p-elecStaff" class="border border-black p-1"></td>
+            <td id="p-elecStaff" class="border border-black p-1 truncate"></td>
           </tr>
         </tbody>
       </table>
 
-      <table class="w-full text-[11px] border-collapse border border-black">
+      <table class="w-full text-[10px] border-collapse border border-black table-fixed">
         <thead>
           <tr class="bg-gray-200">
-            <th class="border border-black p-1 text-center w-8">No</th>
-            <th class="border border-black p-1 w-32">製品型式</th>
-            <th class="border border-black p-1 w-32">シリアルNo</th>
-            <th class="border border-black p-1 w-24">機器名称</th>
-            <th class="border border-black p-1">備考</th>
+            <th class="border border-black p-0.5 text-center w-7">No</th>
+            <th class="border border-black p-0.5 w-[28%]">製品型式</th>
+            <th class="border border-black p-0.5 w-[28%]">シリアルNo</th>
+            <th class="border border-black p-0.5 w-[18%]">機器名称</th>
+            <th class="border border-black p-0.5">備考</th>
           </tr>
         </thead>
         <tbody id="p-tbody"></tbody>
@@ -323,7 +323,7 @@
           viewInput.classList.remove('hidden');
           const item = items[currentStep];
           document.getElementById('unit-title').innerText = currentStep >= 4 ? `各種機器 ${currentStep - 3} 画面` : `${item.title} 画面`;
-          document.getElementById('step-indicator').innerText = `${currentStep + 1} / ${items.length}`;
+          document.getElementById('step-indicator').innerText = `${currentStep + 1} /${items.length}`;
           
           document.getElementById('f-model').value = item.model || '';
           document.getElementById('f-serial').value = item.serial || '';
@@ -368,12 +368,12 @@
               const rowData = items[i] || { model: '', serial: '', title: '', remarks: '' };
               const displayTitle = rowData.title || (i < 4 ? items[i].title : '');
               tbody.innerHTML += `
-                <tr class="h-5">
+                <tr class="h-4">
                   <td class="border border-black text-center font-bold bg-gray-50">${i + 1}</td>
-                  <td class="border border-black px-1 font-bold">${rowData.model}</td>
-                  <td class="border border-black px-1 font-bold">${rowData.serial}</td>
-                  <td class="border border-black px-1">${displayTitle}</td>
-                  <td class="border border-black px-1">${rowData.remarks}</td>
+                  <td class="border border-black px-1 font-bold truncate">${rowData.model}</td>
+                  <td class="border border-black px-1 font-bold truncate">${rowData.serial}</td>
+                  <td class="border border-black px-1 truncate">${displayTitle}</td>
+                  <td class="border border-black px-1 truncate">${rowData.remarks}</td>
                 </tr>
               `;
             }
@@ -536,7 +536,7 @@
         const docNo = document.getElementById('docNo').value.toUpperCase();
         const modelName = document.getElementById('modelName').value.toUpperCase();
         const unitNo = document.getElementById('unitNo').value || '1';
-        const filename = `${yy}${mm}${dd}_${modelName || '機種'}_${docNo || '指図書'}_${unitNo}.csv`;
+        const filename = `${yy}${mm}${dd}_${modelName || '機種'}_${docNo \vert{}\vert{} '指図書'}_${unitNo}.csv`;
 
         let csv = "\uFEFF";
         csv += `製造指図書No,${docNo},客先名,${document.getElementById('customer').value.toUpperCase()}\n`;
@@ -548,44 +548,4 @@
         for (let i = 0; i < 25; i++) {
           const it = items[i] || { model: '', serial: '', title: '', remarks: '' };
           const titleVal = it.title || (i < 4 ? items[i].title : '');
-          csv += `${i+1},"${it.model}","${it.serial}","${titleVal}","${it.remarks}"\n`;
-        }
-
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-
-      const bindClick = (id, fn) => {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('click', fn);
-      };
-
-      bindClick('btn-start', goToInput);
-      bindClick('btn-top', goToTop);
-      bindClick('btn-next', nextStep);
-      bindClick('btn-prev', prevStep);
-      bindClick('btn-add-device', addDevice);
-      bindClick('btn-back-edit', goToInput);
-      bindClick('btn-cam', toggleCamera);
-      bindClick('btn-capture', captureAndAnalyze);
-      bindClick('btn-save-csv', saveCSV);
-      bindClick('btn-print', () => window.print());
-      
-      bindClick('btn-load-csv', () => document.getElementById('csvFileInput').click());
-      bindClick('btn-load-csv-2', () => document.getElementById('csvFileInput').click());
-      
-      const fileInput = document.getElementById('csvFileInput');
-      if (fileInput) {
-        fileInput.addEventListener('change', loadCSVFile);
-      }
-
-      render();
-    });
-  </script>
-</body>
-</html>
+          csv += `${i+1},"${it.model}","${it.serial}","${titleVal}","${it.remarks}"\n
