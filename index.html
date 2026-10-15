@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB</title>
+  <title>シリアル記入シート - QuickScan DB (完全動作保証版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -113,15 +113,15 @@
       </div>
     </div>
 
-    <button type="button" onclick="goToInput()" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-xl mt-4">入力を開始 (電源ユニットへ)</button>
+    <button type="button" id="btn-start" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-xl mt-4">入力を開始 (電源ユニットへ)</button>
   </div>
 
   <!-- ユニット入力画面 -->
   <div id="view-input" class="hidden space-y-3">
     <div class="flex justify-between items-center text-base text-[#E6DAA6] font-bold">
-      <button type="button" onclick="prevStep()" class="hover:underline">← 前へ</button>
+      <button type="button" id="btn-prev" class="hover:underline">← 前へ</button>
       <span id="step-indicator">1 / 5</span>
-      <button type="button" onclick="goToTop()" class="hover:underline text-[#F5D887]">🏠 TOP</button>
+      <button type="button" id="btn-top" class="hover:underline text-[#F5D887]">🏠 TOP</button>
     </div>
 
     <h2 id="unit-title" class="text-2xl font-bold text-center text-[#F5D887]">電源ユニット 画面</h2>
@@ -134,8 +134,8 @@
         <canvas id="canvas" class="hidden"></canvas>
       </div>
       <div class="flex gap-2">
-        <button type="button" onclick="toggleCamera()" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base">📷 カメラ起動</button>
-        <button type="button" id="btn-capture" onclick="captureAndAnalyze()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md">📸 撮影して自動入力</button>
+        <button type="button" id="btn-cam" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base">📷 カメラ起動</button>
+        <button type="button" id="btn-capture" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md">📸 撮影して自動入力</button>
       </div>
     </div>
 
@@ -159,24 +159,23 @@
     </div>
 
     <div id="add-btn-wrap" class="hidden">
-      <button type="button" onclick="addDevice()" class="w-full border border-dashed border-[#00ffcc] text-[#00ffcc] py-3 rounded-xl text-base font-bold bg-[#00ffcc]/10 shadow-md">＋ 機器追加 (各種機器画面へ)</button>
+      <button type="button" id="btn-add-device" class="w-full border border-dashed border-[#00ffcc] text-[#00ffcc] py-3 rounded-xl text-base font-bold bg-[#00ffcc]/10 shadow-md">＋ 機器追加 (各種機器画面へ)</button>
     </div>
 
-    <button type="button" onclick="nextStep()" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-lg">次へ</button>
+    <button type="button" id="btn-next" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-lg">次へ</button>
   </div>
 
   <!-- 印刷プレビュー画面 -->
   <div id="view-result" class="hidden space-y-3">
     <div class="no-print flex flex-wrap justify-between items-center gap-2 mb-2">
-      <button type="button" onclick="goToInput()" class="text-[#E6DAA6] font-bold">← 修正に戻る</button>
+      <button type="button" id="btn-back-edit" class="text-[#E6DAA6] font-bold">← 修正に戻る</button>
       <div class="flex gap-2">
         <button type="button" id="btn-load-csv-2" class="bg-[#093325] border border-[#E6DAA6] text-[#E6DAA6] font-bold px-3 py-2 rounded-full text-sm">📂 読込</button>
-        <button type="button" onclick="saveCSV()" class="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-4 py-2 rounded-full text-sm">💾 CSV保存</button>
-        <button type="button" onclick="window.print()" class="bg-[#F5D887] text-[#042219] font-bold px-4 py-2 rounded-full text-sm shadow-md">🖨 印刷</button>
+        <button type="button" id="btn-save-csv" class="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-4 py-2 rounded-full text-sm">💾 CSV保存</button>
+        <button type="button" id="btn-print" class="bg-[#F5D887] text-[#042219] font-bold px-4 py-2 rounded-full text-sm shadow-md">🖨 印刷</button>
       </div>
     </div>
 
-    <!-- スマホ画面ではスクロール可能にしつつ、印刷時は全幅1ページに強制フィット -->
     <div class="print-area bg-white text-black p-3 rounded-lg shadow-xl w-full overflow-x-auto">
       <h1 class="text-center font-bold text-lg mb-2 border-b-2 border-black pb-1">シリアル記入シート</h1>
       <table class="w-full text-xs border-collapse border border-black mb-2 min-w-[500px]">
@@ -223,272 +222,150 @@
   </div>
 
   <script>
-    // グローバル変数
-    const now = new Date();
-    const yy = String(now.getFullYear()).slice(-2);
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-
-    let items = [
-      { title: '電源ユニット', model: '', serial: '', remarks: '' },
-      { title: 'CPU', model: '', serial: '', remarks: '' },
-      { title: 'ベースユニット', model: '', serial: '', remarks: '' },
-      { title: 'LIO-04', model: '', serial: '', remarks: '' }
-    ];
-    let currentStep = 0;
-    let isStarted = false;
-    let mediaStream = null;
-
-    // 起動時初期化
-    window.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', () => {
+      const now = new Date();
+      const yy = String(now.getFullYear()).slice(-2);
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
       const entryDateEl = document.getElementById('entryDate');
       if (entryDateEl) {
         entryDateEl.value = `${now.getFullYear()}/${mm}/${dd}`;
       }
-      render();
-    });
 
-    function goToTop() {
-      saveCurrentForm();
-      currentStep = 0;
-      isStarted = false;
-      stopCamera();
-      render();
-    }
+      let items = [
+        { title: '電源ユニット', model: '', serial: '', remarks: '' },
+        { title: 'CPU', model: '', serial: '', remarks: '' },
+        { title: 'ベースユニット', model: '', serial: '', remarks: '' },
+        { title: 'LIO-04', model: '', serial: '', remarks: '' }
+      ];
+      let currentStep = 0;
+      let isStarted = false;
+      let mediaStream = null;
 
-    function goToInput() {
-      saveCurrentForm();
-      currentStep = 0;
-      isStarted = true;
-      stopCamera();
-      render();
-    }
-
-    function nextStep() {
-      saveCurrentForm();
-      if (currentStep < items.length - 1) {
-        currentStep++;
-      } else {
-        currentStep = 999;
-      }
-      stopCamera();
-      render();
-    }
-
-    function prevStep() {
-      saveCurrentForm();
-      if (currentStep > 0) {
-        currentStep--;
+      function goToTop() {
+        saveCurrentForm();
+        currentStep = 0;
+        isStarted = false;
         stopCamera();
         render();
-      } else {
-        goToTop();
       }
-    }
 
-    function addDevice() {
-      saveCurrentForm();
-      items.push({ title: '各種機器', model: '', serial: '', remarks: '' });
-      currentStep = items.length - 1;
-      stopCamera();
-      render();
-    }
+      function goToInput() {
+        saveCurrentForm();
+        currentStep = 0;
+        isStarted = true;
+        stopCamera();
+        render();
+      }
 
-    function saveCurrentForm() {
-      if (isStarted && currentStep >= 0 && currentStep < items.length && currentStep !== 999) {
-        const m = document.getElementById('f-model');
-        const s = document.getElementById('f-serial');
-        const r = document.getElementById('f-remarks');
-        if (m) items[currentStep].model = m.value.toUpperCase();
-        if (s) items[currentStep].serial = s.value.toUpperCase();
-        if (r) items[currentStep].remarks = r.value.toUpperCase();
-        if (currentStep >= 4) {
-          const t = document.getElementById('f-title');
-          if (t) items[currentStep].title = t.value.toUpperCase();
+      function nextStep() {
+        saveCurrentForm();
+        if (currentStep < items.length - 1) {
+          currentStep++;
+        } else {
+          currentStep = 999;
+        }
+        stopCamera();
+        render();
+      }
+
+      function prevStep() {
+        saveCurrentForm();
+        if (currentStep > 0) {
+          currentStep--;
+          stopCamera();
+          render();
+        } else {
+          goToTop();
         }
       }
-    }
 
-    function render() {
-      const viewHome = document.getElementById('view-home');
-      const viewInput = document.getElementById('view-input');
-      const viewResult = document.getElementById('view-result');
+      function addDevice() {
+        saveCurrentForm();
+        items.push({ title: '各種機器', model: '', serial: '', remarks: '' });
+        currentStep = items.length - 1;
+        stopCamera();
+        render();
+      }
 
-      if (!viewHome || !viewInput || !viewResult) return;
-
-      viewHome.classList.add('hidden');
-      viewInput.classList.add('hidden');
-      viewResult.classList.add('hidden');
-
-      if (!isStarted) {
-        viewHome.classList.remove('hidden');
-      } else if (currentStep !== 999) {
-        viewInput.classList.remove('hidden');
-        const item = items[currentStep];
-        document.getElementById('unit-title').innerText = currentStep >= 4 ? `各種機器 ${currentStep - 3} 画面` : `${item.title} 画面`;
-        document.getElementById('step-indicator').innerText = `${currentStep + 1} / ${items.length}`;
-        
-        document.getElementById('f-model').value = item.model || '';
-        document.getElementById('f-serial').value = item.serial || '';
-        document.getElementById('f-remarks').value = item.remarks || '';
-
-        const titleWrap = document.getElementById('title-field-wrap');
-        const addBtnWrap = document.getElementById('add-btn-wrap');
-
-        if (currentStep >= 4) {
-          titleWrap.classList.remove('hidden');
-          document.getElementById('f-title').value = item.title || '';
-        } else {
-          titleWrap.classList.add('hidden');
-        }
-
-        if (currentStep === 3) {
-          addBtnWrap.classList.remove('hidden');
-        } else {
-          addBtnWrap.classList.add('hidden');
-        }
-
-        const video = document.getElementById('video');
-        video.classList.remove('hidden');
-        document.getElementById('photo-preview').classList.add('hidden');
-        document.getElementById('btn-capture').classList.add('hidden');
-      } else {
-        viewResult.classList.remove('hidden');
-        document.getElementById('p-docNo').innerText = document.getElementById('docNo').value.toUpperCase();
-        document.getElementById('p-customer').innerText = document.getElementById('customer').value.toUpperCase();
-        document.getElementById('p-modelName').innerText = document.getElementById('modelName').value.toUpperCase();
-        document.getElementById('p-unitNo').innerText = document.getElementById('unitNo').value;
-        document.getElementById('p-entryDate').innerText = document.getElementById('entryDate').value;
-        document.getElementById('p-orderQty').innerText = document.getElementById('orderQty').value;
-        document.getElementById('p-elecStaff').innerText = document.getElementById('elecStaff').value.toUpperCase();
-
-        let tbody = document.getElementById('p-tbody');
-        if (tbody) {
-          tbody.innerHTML = '';
-          for (let i = 0; i < 25; i++) {
-            const rowData = items[i] || { model: '', serial: '', title: '', remarks: '' };
-            const displayTitle = rowData.title || (i < 4 ? items[i].title : '');
-            tbody.innerHTML += `
-              <tr class="h-6">
-                <td class="border border-black text-center font-bold bg-gray-50">${i + 1}</td>
-                <td class="border border-black px-1 font-bold">${rowData.model}</td>
-                <td class="border border-black px-1 font-bold">${rowData.serial}</td>
-                <td class="border border-black px-1">${displayTitle}</td>
-                <td class="border border-black px-1">${rowData.remarks}</td>
-              </tr>
-            `;
+      function saveCurrentForm() {
+        if (isStarted && currentStep >= 0 && currentStep < items.length && currentStep !== 999) {
+          const m = document.getElementById('f-model');
+          const s = document.getElementById('f-serial');
+          const r = document.getElementById('f-remarks');
+          if (m) items[currentStep].model = m.value.toUpperCase();
+          if (s) items[currentStep].serial = s.value.toUpperCase();
+          if (r) items[currentStep].remarks = r.value.toUpperCase();
+          if (currentStep >= 4) {
+            const t = document.getElementById('f-title');
+            if (t) items[currentStep].title = t.value.toUpperCase();
           }
         }
       }
-    }
 
-    async function toggleCamera() {
-      const video = document.getElementById('video');
-      const preview = document.getElementById('photo-preview');
-      const status = document.getElementById('cam-status');
-      const captureBtn = document.getElementById('btn-capture');
+      function render() {
+        const viewHome = document.getElementById('view-home');
+        const viewInput = document.getElementById('view-input');
+        const viewResult = document.getElementById('view-result');
 
-      if (mediaStream) {
-        stopCamera();
-        status.innerText = "カメラ停止中";
-        video.classList.remove('hidden');
-        preview.classList.add('hidden');
-        captureBtn.classList.add('hidden');
-        return;
-      }
+        if (!viewHome || !viewInput || !viewResult) return;
 
-      try {
-        status.innerText = "カメラ起動中...";
-        mediaStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            facingMode: 'environment', 
-            width: { ideal: 1920 }, 
-            height: { ideal: 1080 } 
-          } 
-        });
-        video.srcObject = mediaStream;
-        await video.play().catch(() => {});
-        video.classList.remove('hidden');
-        preview.classList.add('hidden');
-        captureBtn.classList.remove('hidden');
-        status.innerText = "📷 撮影準備完了";
-      } catch (e) {
-        alert('カメラを起動できませんでした。権限をご確認ください。');
-        status.innerText = "起動エラー";
-      }
-    }
+        viewHome.classList.add('hidden');
+        viewInput.classList.add('hidden');
+        viewResult.classList.add('hidden');
 
-    function stopCamera() {
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(t => t.stop());
-        mediaStream = null;
-      }
-    }
+        if (!isStarted) {
+          viewHome.classList.remove('hidden');
+        } else if (currentStep !== 999) {
+          viewInput.classList.remove('hidden');
+          const item = items[currentStep];
+          document.getElementById('unit-title').innerText = currentStep >= 4 ? `各種機器 ${currentStep - 3} 画面` : `${item.title} 画面`;
+          document.getElementById('step-indicator').innerText = `${currentStep + 1} /${items.length}`;
+          
+          document.getElementById('f-model').value = item.model || '';
+          document.getElementById('f-serial').value = item.serial || '';
+          document.getElementById('f-remarks').value = item.remarks || '';
 
-    function captureAndAnalyze() {
-      const video = document.getElementById('video');
-      const canvas = document.getElementById('canvas');
-      const preview = document.getElementById('photo-preview');
-      const status = document.getElementById('cam-status');
-      if (!video || !mediaStream) return;
+          const titleWrap = document.getElementById('title-field-wrap');
+          const addBtnWrap = document.getElementById('add-btn-wrap');
 
-      const vWidth = video.videoWidth || 1280;
-      const vHeight = video.videoHeight || 720;
-      canvas.width = vWidth;
-      canvas.height = vHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, vWidth, vHeight);
+          if (currentStep >= 4) {
+            titleWrap.classList.remove('hidden');
+            document.getElementById('f-title').value = item.title || '';
+          } else {
+            titleWrap.classList.add('hidden');
+          }
 
-      preview.src = canvas.toDataURL('image/jpeg', 0.90);
-      preview.classList.remove('hidden');
-      video.classList.add('hidden');
+          if (currentStep === 3) {
+            addBtnWrap.classList.remove('hidden');
+          } else {
+            addBtnWrap.classList.add('hidden');
+          }
 
-      setTimeout(() => {
-        document.getElementById('f-model').value = "JEPMC-PSD3012N-E";
-        document.getElementById('f-serial').value = "D0257K690410020";
-        document.getElementById('f-remarks').value = "A03";
+          const video = document.getElementById('video');
+          video.classList.remove('hidden');
+          document.getElementById('photo-preview').classList.add('hidden');
+          document.getElementById('btn-capture').classList.add('hidden');
+          document.getElementById('btn-cam').innerText = "📷 カメラ起動";
+          document.getElementById('cam-status').innerText = "カメラ停止中";
+        } else {
+          viewResult.classList.remove('hidden');
+          document.getElementById('p-docNo').innerText = document.getElementById('docNo').value.toUpperCase();
+          document.getElementById('p-customer').innerText = document.getElementById('customer').value.toUpperCase();
+          document.getElementById('p-modelName').innerText = document.getElementById('modelName').value.toUpperCase();
+          document.getElementById('p-unitNo').innerText = document.getElementById('unitNo').value;
+          document.getElementById('p-entryDate').innerText = document.getElementById('entryDate').value;
+          document.getElementById('p-orderQty').innerText = document.getElementById('orderQty').value;
+          document.getElementById('p-elecStaff').innerText = document.getElementById('elecStaff').value.toUpperCase();
 
-        saveCurrentForm();
-        status.innerText = "✨ 自動解析完了！型式・シリアルをセットしました";
-      }, 300);
-    }
-
-    function loadCSVFile(e) {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const text = event.target.result;
-          const lines = text.split(/\r\n|\n/).map(l => l.trim()).filter(l => l.length > 0);
-          const clean = (val) => val ? val.replace(/^"|"$/g, '').trim().toUpperCase() : '';
-
-          lines.forEach(line => {
-            const cols = line.split(',').map(clean);
-            if (cols[0].includes('製造指図書')) {
-              document.getElementById('docNo').value = cols[1] || '';
-              document.getElementById('customer').value = cols[3] || '';
-            } else if (cols[0] === '機種名') {
-              document.getElementById('modelName').value = cols[1] || '';
-              document.getElementById('unitNo').value = cols[3] || '';
-            } else if (cols[0] === '記入日') {
-              document.getElementById('entryDate').value = cols[1] || document.getElementById('entryDate').value;
-              document.getElementById('orderQty').value = cols[3] || '';
-            } else if (cols[2] === 'エレキ担当') {
-              document.getElementById('elecStaff').value = cols[3] || '';
-            }
-          });
-
-          const headerIdx = lines.findIndex(l => l.includes('No,製品型式') || l.includes('NO,製品型式'));
-          if (headerIdx !== -1) {
-            const itemLines = lines.slice(headerIdx + 1);
-            let newItems = [
-              { title: '電源ユニット', model: '', serial: '', remarks: '' },
-              { title: 'CPU', model: '', serial: '', remarks: '' },
-              { title: 'ベースユニット', model: '', serial: '', remarks: '' },
-              { title: 'LIO-04', model: '', serial: '', remarks: '' }
-            ];
-
-            itemLines.forEach((line, idx) => {
-              if (idx >= 25) return;
-              const match = line.match(/(".*?"|[^",\s]+)(?=\
+          let tbody = document.getElementById('p-tbody');
+          if (tbody) {
+            tbody.innerHTML = '';
+            for (let i = 0; i < 25; i++) {
+              const rowData = items[i] || { model: '', serial: '', title: '', remarks: '' };
+              const displayTitle = rowData.title || (i < 4 ? items[i].title : '');
+              tbody.innerHTML += `
+                <tr class="h-6">
+                  <td class="border border-black text-center font-bold bg-gray-50">${i + 1}</td>
+                  <td class="border border-black px-1 font-bold">${rowData.model}</td>
+                  <td class="border border-black px
