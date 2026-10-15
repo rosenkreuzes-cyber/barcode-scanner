@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB (完全機能復元・超安定版)</title>
+  <title>シリアル記入シート - QuickScan DB (カメラ撮影・プレビュー完全版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,7 +36,7 @@
   <!-- TOP画面（基本情報） -->
   <div id="view-home" class="space-y-4">
     <h1 class="text-3xl font-extrabold text-center text-[#F5D887] mt-2">QuickScan DB</h1>
-    <p class="text-sm text-center text-[#E6DAA6]/80">完全機能復元・超安定版</p>
+    <p class="text-sm text-center text-[#E6DAA6]/80">基本情報設定</p>
 
     <div class="bg-[#093325] border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3 shadow-lg">
       <div>
@@ -95,9 +95,12 @@
     <h2 id="unit-title" class="text-2xl font-bold text-center text-[#F5D887]">電源ユニット 画面</h2>
 
     <div class="bg-[#093325]/90 border border-[#E6DAA6]/30 p-3 rounded-2xl text-center shadow-lg">
-      <div class="relative w-full h-48 bg-black rounded-xl overflow-hidden flex items-center justify-center mb-2 border border-[#E6DAA6]/20">
-        <video id="video" playsInline muted autoplay class="w-full h-full object-cover hidden"></video>
-        <span id="cam-status" class="text-base text-[#E6DAA6]/70">📷 カメラ停止中</span>
+      <div class="relative w-full h-52 bg-black rounded-xl overflow-hidden flex items-center justify-center mb-2 border border-[#E6DAA6]/20">
+        <!-- ライブカメラ映像 -->
+        <video id="video" playsInline muted autoplay class="w-full h-full object-cover"></video>
+        <!-- 撮影した静止画のプレビュー表示用画像タグ -->
+        <img id="photo-preview" class="w-full h-full object-cover hidden" alt="撮影プレビュー" />
+        <span id="cam-status" class="absolute bottom-2 text-xs bg-black/60 px-2 py-1 rounded text-[#00ffcc] font-mono font-bold">カメラ停止中</span>
         <canvas id="canvas" class="hidden"></canvas>
       </div>
       <div class="flex gap-2">
@@ -196,14 +199,13 @@
     const dd = String(now.getDate()).padStart(2, '0');
     document.getElementById('entryDate').value = `${now.getFullYear()}/${mm}/${dd}`;
 
-    // 項目データ（初期4固定ユニット）
     let items = [
       { title: '電源ユニット', model: '', serial: '', remarks: '' },
       { title: 'CPU', model: '', serial: '', remarks: '' },
       { title: 'ベースユニット', model: '', serial: '', remarks: '' },
       { title: 'LIO-04', model: '', serial: '', remarks: '' }
     ];
-    let currentStep = 0; // 0~3: 固定, 4+: 各種機器, 999: プレビュー
+    let currentStep = 0;
     let mediaStream = null;
 
     function goToTop() {
@@ -287,203 +289,14 @@
           titleWrap.classList.add('hidden');
         }
 
-        if (currentStep === 3) { // LIO-04画面
+        if (currentStep === 3) {
           addBtnWrap.classList.remove('hidden');
         } else {
           addBtnWrap.classList.add('hidden');
         }
-      } else {
-        document.getElementById('view-result').classList.remove('hidden');
-        document.getElementById('p-docNo').innerText = document.getElementById('docNo').value.toUpperCase();
-        document.getElementById('p-customer').innerText = document.getElementById('customer').value.toUpperCase();
-        document.getElementById('p-modelName').innerText = document.getElementById('modelName').value.toUpperCase();
-        document.getElementById('p-unitNo').innerText = document.getElementById('unitNo').value;
-        document.getElementById('p-entryDate').innerText = document.getElementById('entryDate').value;
-        document.getElementById('p-orderQty').innerText = document.getElementById('orderQty').value;
-        document.getElementById('p-elecStaff').innerText = document.getElementById('elecStaff').value.toUpperCase();
 
-        let tbody = document.getElementById('p-tbody');
-        tbody.innerHTML = '';
-        for (let i = 0; i < 25; i++) {
-          const rowData = items[i] || { model: '', serial: '', title: '', remarks: '' };
-          const displayTitle = rowData.title || (i < 4 ? items[i].title : '');
-          tbody.innerHTML += `
-            <tr class="h-6">
-              <td class="border border-black text-center font-bold bg-gray-50">${i + 1}</td>
-              <td class="border border-black px-1 font-bold">${rowData.model}</td>
-              <td class="border border-black px-1 font-bold">${rowData.serial}</td>
-              <td class="border border-black px-1">${displayTitle}</td>
-              <td class="border border-black px-1">${rowData.remarks}</td>
-            </tr>
-          `;
-        }
-      }
-    }
-
-    function goToInput() {
-      window.inInputFlow = true;
-      currentStep = 0;
-      render();
-    }
-
-    // カメラ制御
-    async function toggleCamera() {
-      const video = document.getElementById('video');
-      const status = document.getElementById('cam-status');
-      const btn = document.getElementById('cam-btn');
-      const captureBtn = document.getElementById('capture-btn');
-
-      if (mediaStream) {
-        stopCamera();
-        status.innerText = "📷 カメラ停止中";
-        video.classList.add('hidden');
-        btn.innerText = "📷 カメラ起動";
-        captureBtn.classList.add('hidden');
-        return;
-      }
-
-      try {
-        status.innerText = "カメラ起動中...";
-        mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } });
-        video.srcObject = mediaStream;
-        video.classList.remove('hidden');
-        btn.innerText = "⏹ 停止";
-        captureBtn.classList.remove('hidden');
-        status.innerText = "📷 撮影準備完了";
-      } catch (e) {
-        alert('カメラを起動できませんでした。権限をご確認ください。');
-        status.innerText = "起動エラー";
-      }
-    }
-
-    function stopCamera() {
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(t => t.stop());
-        mediaStream = null;
-      }
-      const captureBtn = document.getElementById('capture-btn');
-      if (captureBtn) captureBtn.classList.add('hidden');
-    }
-
-    // 撮影ボタン処理
-    function captureImage() {
-      const video = document.getElementById('video');
-      const canvas = document.getElementById('canvas');
-      if (!video) return;
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      document.getElementById('cam-status').innerText = "📸 撮影完了！ (手動で確認・調整してください)";
-    }
-
-    // CSV読込処理
-    function loadCSVFile(e) {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const text = event.target.result;
-          const lines = text.split(/\r\n|\n/).map(l => l.trim()).filter(l => l.length > 0);
-          const clean = (val) => val ? val.replace(/^"|"$/g, '').trim().toUpperCase() : '';
-
-          lines.forEach(line => {
-            const cols = line.split(',').map(clean);
-            if (cols[0].includes('製造指図書')) {
-              document.getElementById('docNo').value = cols[1] || '';
-              document.getElementById('customer').value = cols[3] || '';
-            } else if (cols[0] === '機種名') {
-              document.getElementById('modelName').value = cols[1] || '';
-              document.getElementById('unitNo').value = cols[3] || '';
-            } else if (cols[0] === '記入日') {
-              document.getElementById('entryDate').value = cols[1] || document.getElementById('entryDate').value;
-              document.getElementById('orderQty').value = cols[3] || '';
-            } else if (cols[2] === 'エレキ担当') {
-              document.getElementById('elecStaff').value = cols[3] || '';
-            }
-          });
-
-          const headerIdx = lines.findIndex(l => l.includes('No,製品型式') || l.includes('NO,製品型式'));
-          if (headerIdx !== -1) {
-            const itemLines = lines.slice(headerIdx + 1);
-            let newItems = [
-              { title: '電源ユニット', model: '', serial: '', remarks: '' },
-              { title: 'CPU', model: '', serial: '', remarks: '' },
-              { title: 'ベースユニット', model: '', serial: '', remarks: '' },
-              { title: 'LIO-04', model: '', serial: '', remarks: '' }
-            ];
-
-            itemLines.forEach((line, idx) => {
-              if (idx >= 25) return;
-              const match = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
-              const cols = match ? match.map(clean) : [];
-              const no = parseInt(cols[0], 10);
-              if (isNaN(no)) return;
-
-              const rowData = {
-                model: cols[1] || '',
-                serial: cols[2] || '',
-                title: cols[3] || '',
-                remarks: cols[4] || ''
-              };
-
-              if (no >= 1 && no <= 4) {
-                newItems[no - 1].model = rowData.model;
-                newItems[no - 1].serial = rowData.serial;
-                newItems[no - 1].remarks = rowData.remarks;
-              } else if (no >= 5) {
-                if (rowData.model || rowData.serial || rowData.title || rowData.remarks) {
-                  newItems.push({
-                    title: rowData.title || '各種機器',
-                    model: rowData.model,
-                    serial: rowData.serial,
-                    remarks: rowData.remarks
-                  });
-                }
-              }
-            });
-            items = newItems;
-          }
-          alert('CSVファイルからデータを復元しました！');
-          document.getElementById('csvFileInput').value = '';
-        } catch (err) {
-          alert('CSVファイルの読み込みに失敗しました。');
-        }
-      };
-      reader.readAsText(file, 'UTF-8');
-    }
-
-    // CSV保存処理
-    function saveCSV() {
-      saveCurrentForm();
-      const docNo = document.getElementById('docNo').value.toUpperCase();
-      const modelName = document.getElementById('modelName').value.toUpperCase();
-      const unitNo = document.getElementById('unitNo').value || '1';
-      const filename = `${yy}${mm}${dd}_${modelName || '機種'}_${docNo || '指図書'}_${unitNo}.csv`;
-
-      let csv = "\uFEFF";
-      csv += `製造指図書No,${docNo},客先名,${document.getElementById('customer').value.toUpperCase()}\n`;
-      csv += `機種名,${modelName},号機No,${unitNo}\n`;
-      csv += `記入日,${document.getElementById('entryDate').value},発注台数,${document.getElementById('orderQty').value}\n`;
-      csv += `,,エレキ担当,${document.getElementById('elecStaff').value.toUpperCase()}\n\n`;
-      csv += `No,製品型式,シリアルNo,機器名称,備考\n`;
-
-      for (let i = 0; i < 25; i++) {
-        const it = items[i] || { model: '', serial: '', title: '', remarks: '' };
-        const titleVal = it.title || (i < 4 ? items[i].title : '');
-        csv += `${i+1},"${it.model}","${it.serial}","${titleVal}","${it.remarks}"\n`;
-      }
-
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-  </script>
-</body>
-</html>
+        // カメラプレビューをリセットしてビデオ表示に戻す
+        document.getElementById('video').classList.remove('hidden');
+        document.getElementById('photo-preview').classList.add('hidden');
+        document.getElementById('capture-btn').classList.add('hidden');
+        document.getElementById
