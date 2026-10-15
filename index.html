@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB (修正版)</title>
+  <title>シリアル記入シート - QuickScan DB (完全動作版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -204,17 +204,21 @@
       { title: 'LIO-04', model: '', serial: '', remarks: '' }
     ];
     let currentStep = 0;
+    let isStarted = false; // スタートフラグ
     let mediaStream = null;
 
     function goToTop() {
       saveCurrentForm();
       currentStep = 0;
+      isStarted = false;
       stopCamera();
       render();
     }
 
     function goToInput() {
+      saveCurrentForm();
       currentStep = 0;
+      isStarted = true;
       stopCamera();
       render();
     }
@@ -250,7 +254,7 @@
     }
 
     function saveCurrentForm() {
-      if (currentStep >= 0 && currentStep < items.length && currentStep !== 999) {
+      if (isStarted && currentStep >= 0 && currentStep < items.length && currentStep !== 999) {
         const m = document.getElementById('f-model');
         const s = document.getElementById('f-serial');
         const r = document.getElementById('f-remarks');
@@ -273,14 +277,13 @@
       viewInput.classList.add('hidden');
       viewResult.classList.add('hidden');
 
-      if (currentStep === 0 && !window.inInputFlow) {
+      if (!isStarted) {
         viewHome.classList.remove('hidden');
       } else if (currentStep !== 999) {
-        window.inInputFlow = true;
         viewInput.classList.remove('hidden');
         const item = items[currentStep];
         document.getElementById('unit-title').innerText = currentStep >= 4 ? `各種機器 ${currentStep - 3} 画面` : `${item.title} 画面`;
-        document.getElementById('step-indicator').innerText = `${currentStep + 1} / ${items.length}`;
+        document.getElementById('step-indicator').innerText = `${currentStep + 1} /${items.length}`;
         
         document.getElementById('f-model').value = item.model || '';
         document.getElementById('f-serial').value = item.serial || '';
@@ -474,7 +477,7 @@
       const docNo = document.getElementById('docNo').value.toUpperCase();
       const modelName = document.getElementById('modelName').value.toUpperCase();
       const unitNo = document.getElementById('unitNo').value || '1';
-      const filename = `${yy}${mm}${dd}_${modelName || '機種'}_${docNo || '指図書'}_${unitNo}.csv`;
+      const filename = `${yy}${mm}${dd}_${modelName || '機種'}_${docNo \vert{}\vert{} '指図書'}_${unitNo}.csv`;
 
       let csv = "\uFEFF";
       csv += `製造指図書No,${docNo},客先名,${document.getElementById('customer').value.toUpperCase()}\n`;
@@ -486,17 +489,4 @@
       for (let i = 0; i < 25; i++) {
         const it = items[i] || { model: '', serial: '', title: '', remarks: '' };
         const titleVal = it.title || (i < 4 ? items[i].title : '');
-        csv += `${i+1},"${it.model}","${it.serial}","${titleVal}","${it.remarks}"\n`;
-      }
-
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-  </script>
-</body>
-</html>
+        csv += `${i+1},"${it.model}","${it.serial}","${titleVal}","${it.remarks}"\n
