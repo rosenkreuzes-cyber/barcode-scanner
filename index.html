@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB (最終強制動作版)</title>
+  <title>シリアル記入シート - QuickScan DB (全ボタン完全動作版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -63,7 +63,7 @@
 <body class="p-3 max-w-xl mx-auto w-full">
 
   <!-- 隠しファイル入力（CSV読込用） -->
-  <input type="file" id="csvFileInput" accept=".csv" class="hidden" onchange="loadCSVFile(event)" />
+  <input type="file" id="csvFileInput" accept=".csv" class="hidden" />
 
   <!-- TOP画面（基本情報） -->
   <div id="view-home" class="space-y-4">
@@ -72,7 +72,7 @@
 
     <div class="bg-[#093325] border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3 shadow-lg">
       <div>
-        <button type="button" onclick="document.getElementById('csvFileInput').click()" class="w-full bg-[#093325] border-2 border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base shadow-md">
+        <button type="button" id="btn-load-csv" class="w-full bg-[#093325] border-2 border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">
           📂 保存済みCSVを読み込んで編集・追記
         </button>
       </div>
@@ -113,16 +113,15 @@
       </div>
     </div>
 
-    <!-- 確実な動作のためインラインイベントとリスナーの両方を設定 -->
-    <button type="button" id="btn-start" onclick="goToInput()" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-xl mt-4 cursor-pointer">入力を開始 (電源ユニットへ)</button>
+    <button type="button" id="btn-start" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-xl mt-4 cursor-pointer">入力を開始 (電源ユニットへ)</button>
   </div>
 
   <!-- ユニット入力画面 -->
   <div id="view-input" class="hidden space-y-3">
     <div class="flex justify-between items-center text-base text-[#E6DAA6] font-bold">
-      <button type="button" onclick="prevStep()" class="hover:underline cursor-pointer">← 前へ</button>
+      <button type="button" id="btn-prev" class="hover:underline cursor-pointer">← 前へ</button>
       <span id="step-indicator">1 / 5</span>
-      <button type="button" onclick="goToTop()" class="hover:underline text-[#F5D887] cursor-pointer">🏠 TOP</button>
+      <button type="button" id="btn-top" class="hover:underline text-[#F5D887] cursor-pointer">🏠 TOP</button>
     </div>
 
     <h2 id="unit-title" class="text-2xl font-bold text-center text-[#F5D887]">電源ユニット 画面</h2>
@@ -135,8 +134,8 @@
         <canvas id="canvas" class="hidden"></canvas>
       </div>
       <div class="flex gap-2">
-        <button type="button" onclick="toggleCamera()" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base cursor-pointer">📷 カメラ起動</button>
-        <button type="button" id="btn-capture" onclick="captureAndAnalyze()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影して自動入力</button>
+        <button type="button" id="btn-cam" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base cursor-pointer">📷 カメラ起動</button>
+        <button type="button" id="btn-capture" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影して自動入力</button>
       </div>
     </div>
 
@@ -160,20 +159,20 @@
     </div>
 
     <div id="add-btn-wrap" class="hidden">
-      <button type="button" onclick="addDevice()" class="w-full border border-dashed border-[#00ffcc] text-[#00ffcc] py-3 rounded-xl text-base font-bold bg-[#00ffcc]/10 shadow-md cursor-pointer">＋ 機器追加 (各種機器画面へ)</button>
+      <button type="button" id="btn-add-device" class="w-full border border-dashed border-[#00ffcc] text-[#00ffcc] py-3 rounded-xl text-base font-bold bg-[#00ffcc]/10 shadow-md cursor-pointer">＋ 機器追加 (各種機器画面へ)</button>
     </div>
 
-    <button type="button" onclick="nextStep()" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-lg cursor-pointer">次へ</button>
+    <button type="button" id="btn-next" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-lg cursor-pointer">次へ</button>
   </div>
 
   <!-- 印刷プレビュー画面 -->
   <div id="view-result" class="hidden space-y-3">
     <div class="no-print flex flex-wrap justify-between items-center gap-2 mb-2">
-      <button type="button" onclick="goToInput()" class="text-[#E6DAA6] font-bold cursor-pointer">← 修正に戻る</button>
+      <button type="button" id="btn-back-edit" class="text-[#E6DAA6] font-bold cursor-pointer">← 修正に戻る</button>
       <div class="flex gap-2">
-        <button type="button" onclick="document.getElementById('csvFileInput').click()" class="bg-[#093325] border border-[#E6DAA6] text-[#E6DAA6] font-bold px-3 py-2 rounded-full text-sm cursor-pointer">📂 読込</button>
-        <button type="button" onclick="saveCSV()" class="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-4 py-2 rounded-full text-sm cursor-pointer">💾 CSV保存</button>
-        <button type="button" onclick="window.print()" class="bg-[#F5D887] text-[#042219] font-bold px-4 py-2 rounded-full text-sm shadow-md cursor-pointer">🖨 印刷</button>
+        <button type="button" id="btn-load-csv-2" class="bg-[#093325] border border-[#E6DAA6] text-[#E6DAA6] font-bold px-3 py-2 rounded-full text-sm cursor-pointer">📂 読込</button>
+        <button type="button" id="btn-save-csv" class="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-4 py-2 rounded-full text-sm cursor-pointer">💾 CSV保存</button>
+        <button type="button" id="btn-print" class="bg-[#F5D887] text-[#042219] font-bold px-4 py-2 rounded-full text-sm shadow-md cursor-pointer">🖨 印刷</button>
       </div>
     </div>
 
@@ -296,6 +295,7 @@
         video.classList.remove('hidden');
         document.getElementById('photo-preview').classList.add('hidden');
         document.getElementById('btn-capture').classList.add('hidden');
+        document.getElementById('btn-cam').innerText = "📷 カメラ起動";
         document.getElementById('cam-status').innerText = "カメラ停止中";
       } else {
         viewResult.classList.remove('hidden');
@@ -377,6 +377,7 @@
       const video = document.getElementById('video');
       const preview = document.getElementById('photo-preview');
       const status = document.getElementById('cam-status');
+      const btn = document.getElementById('btn-cam');
       const captureBtn = document.getElementById('btn-capture');
 
       if (mediaStream) {
@@ -384,6 +385,7 @@
         status.innerText = "カメラ停止中";
         video.classList.remove('hidden');
         preview.classList.add('hidden');
+        btn.innerText = "📷 カメラ起動";
         captureBtn.classList.add('hidden');
         return;
       }
@@ -401,6 +403,7 @@
         await video.play().catch(() => {});
         video.classList.remove('hidden');
         preview.classList.add('hidden');
+        btn.innerText = "⏹ 停止";
         captureBtn.classList.remove('hidden');
         status.innerText = "📷 撮影準備完了";
       } catch (e) {
@@ -531,42 +534,4 @@
       csv += `製造指図書No,${docNo},客先名,${document.getElementById('customer').value.toUpperCase()}\n`;
       csv += `機種名,${modelName},号機No,${unitNo}\n`;
       csv += `記入日,${document.getElementById('entryDate').value},発注台数,${document.getElementById('orderQty').value}\n`;
-      csv += `,,エレキ担当,${document.getElementById('elecStaff').value.toUpperCase()}\n\n`;
-      csv += `No,製品型式,シリアルNo,機器名称,備考\n`;
-
-      for (let i = 0; i < 25; i++) {
-        const it = items[i] || { model: '', serial: '', title: '', remarks: '' };
-        const titleVal = it.title || (i < 4 ? items[i].title : '');
-        csv += `${i+1},"${it.model}","${it.serial}","${titleVal}","${it.remarks}"\n`;
-      }
-
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-
-    // 初回ロード時の初期化とイベント二重安全登録
-    window.addEventListener('DOMContentLoaded', () => {
-      const entryDateEl = document.getElementById('entryDate');
-      if (entryDateEl) {
-        entryDateEl.value = `${now.getFullYear()}/${mm}/${dd}`;
-      }
-
-      // 万が一の取りこぼしを防ぐための直接リスナー付与
-      const startBtn = document.getElementById('btn-start');
-      if (startBtn) {
-        startBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          goToInput();
-        });
-      }
-
-      render();
-    });
-  </script>
-</body>
-</html>
+      csv +=
