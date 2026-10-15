@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB (1ページ完全収容版)</title>
+  <title>シリアル記入シート - QuickScan DB</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -18,7 +18,7 @@
     }
     input { color-scheme: dark; text-transform: uppercase; }
 
-    /* iPhone/スマホ完全対応・A4縦1ページ強制収容設定 */
+    /* A4縦1ページに確実に収めるための印刷設定 */
     @media print {
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       html, body {
@@ -26,7 +26,6 @@
         color: black !important;
         width: 100% !important;
         height: 100% !important;
-        font-size: 7.5px !important;
       }
       .no-print { display: none !important; }
       .print-area {
@@ -36,7 +35,6 @@
         margin: 0 !important;
         padding: 2mm !important;
         box-shadow: none !important;
-        overflow: visible !important;
         background: white !important;
       }
       table {
@@ -46,9 +44,9 @@
       }
       th, td {
         border: 1px solid #000 !important;
-        padding: 1.5px 3px !important;
-        font-size: 7.5px !important;
-        line-height: 1.0 !important;
+        padding: 2px 3px !important;
+        font-size: 8px !important;
+        line-height: 1.1 !important;
         color: black !important;
         white-space: nowrap;
         overflow: hidden;
@@ -57,12 +55,12 @@
       th { background-color: #f2f2f2 !important; }
       @page {
         size: A4 portrait;
-        margin: 4mm;
+        margin: 5mm;
       }
     }
   </style>
 </head>
-<body class="p-2 max-w-xl mx-auto w-full">
+<body class="p-3 max-w-xl mx-auto w-full">
 
   <!-- 隠しファイル入力（CSV読込用） -->
   <input type="file" id="csvFileInput" accept=".csv" class="hidden" />
@@ -178,45 +176,45 @@
       </div>
     </div>
 
-    <!-- スマホ画面からはみ出さないようラップしつつ、印刷時は完全に1ページ幅に強制フィット -->
-    <div class="print-area bg-white text-black p-2 rounded-lg shadow-xl w-full max-w-full overflow-hidden">
-      <h1 class="text-center font-bold text-base mb-1.5 border-b-2 border-black pb-0.5">シリアル記入シート</h1>
-      <table class="w-full text-[10px] border-collapse border border-black mb-1.5 table-fixed">
+    <!-- スマホ画面ではスクロール可能にしつつ、印刷時は全幅1ページに強制フィット -->
+    <div class="print-area bg-white text-black p-3 rounded-lg shadow-xl w-full overflow-x-auto">
+      <h1 class="text-center font-bold text-lg mb-2 border-b-2 border-black pb-1">シリアル記入シート</h1>
+      <table class="w-full text-xs border-collapse border border-black mb-2 min-w-[500px]">
         <tbody>
           <tr>
-            <th class="border border-black p-1 bg-gray-100 w-20">製造指図書No</th>
-            <td id="p-docNo" class="border border-black p-1 font-bold truncate"></td>
-            <th class="border border-black p-1 bg-gray-100 w-14">客先名</th>
-            <td id="p-customer" class="border border-black p-1 truncate"></td>
+            <th class="border border-black p-1 bg-gray-100 w-24">製造指図書No</th>
+            <td id="p-docNo" class="border border-black p-1 font-bold"></td>
+            <th class="border border-black p-1 bg-gray-100 w-16">客先名</th>
+            <td id="p-customer" class="border border-black p-1"></td>
           </tr>
           <tr>
             <th class="border border-black p-1 bg-gray-100">機種名</th>
-            <td id="p-modelName" class="border border-black p-1 font-bold truncate"></td>
+            <td id="p-modelName" class="border border-black p-1 font-bold"></td>
             <th class="border border-black p-1 bg-gray-100">号機No</th>
-            <td id="p-unitNo" class="border border-black p-1 truncate"></td>
+            <td id="p-unitNo" class="border border-black p-1"></td>
           </tr>
           <tr>
             <th class="border border-black p-1 bg-gray-100">記入日</th>
-            <td id="p-entryDate" class="border border-black p-1 truncate"></td>
+            <td id="p-entryDate" class="border border-black p-1"></td>
             <th class="border border-black p-1 bg-gray-100">発注台数</th>
-            <td id="p-orderQty" class="border border-black p-1 truncate"></td>
+            <td id="p-orderQty" class="border border-black p-1"></td>
           </tr>
           <tr>
             <th class="border border-black p-1 bg-gray-100" colspan="2"></th>
             <th class="border border-black p-1 bg-gray-100">エレキ担当</th>
-            <td id="p-elecStaff" class="border border-black p-1 truncate"></td>
+            <td id="p-elecStaff" class="border border-black p-1"></td>
           </tr>
         </tbody>
       </table>
 
-      <table class="w-full text-[10px] border-collapse border border-black table-fixed">
+      <table class="w-full text-xs border-collapse border border-black min-w-[500px]">
         <thead>
           <tr class="bg-gray-200">
-            <th class="border border-black p-0.5 text-center w-7">No</th>
-            <th class="border border-black p-0.5 w-[28%]">製品型式</th>
-            <th class="border border-black p-0.5 w-[28%]">シリアルNo</th>
-            <th class="border border-black p-0.5 w-[18%]">機器名称</th>
-            <th class="border border-black p-0.5">備考</th>
+            <th class="border border-black p-1 text-center w-8">No</th>
+            <th class="border border-black p-1 w-36">製品型式</th>
+            <th class="border border-black p-1 w-36">シリアルNo</th>
+            <th class="border border-black p-1 w-24">機器名称</th>
+            <th class="border border-black p-1">備考</th>
           </tr>
         </thead>
         <tbody id="p-tbody"></tbody>
@@ -323,7 +321,7 @@
           viewInput.classList.remove('hidden');
           const item = items[currentStep];
           document.getElementById('unit-title').innerText = currentStep >= 4 ? `各種機器 ${currentStep - 3} 画面` : `${item.title} 画面`;
-          document.getElementById('step-indicator').innerText = `${currentStep + 1} /${items.length}`;
+          document.getElementById('step-indicator').innerText = `${currentStep + 1} / ${items.length}`;
           
           document.getElementById('f-model').value = item.model || '';
           document.getElementById('f-serial').value = item.serial || '';
@@ -347,205 +345,4 @@
 
           const video = document.getElementById('video');
           video.classList.remove('hidden');
-          document.getElementById('photo-preview').classList.add('hidden');
-          document.getElementById('btn-capture').classList.add('hidden');
-          document.getElementById('btn-cam').innerText = "📷 カメラ起動";
-          document.getElementById('cam-status').innerText = "カメラ停止中";
-        } else {
-          viewResult.classList.remove('hidden');
-          document.getElementById('p-docNo').innerText = document.getElementById('docNo').value.toUpperCase();
-          document.getElementById('p-customer').innerText = document.getElementById('customer').value.toUpperCase();
-          document.getElementById('p-modelName').innerText = document.getElementById('modelName').value.toUpperCase();
-          document.getElementById('p-unitNo').innerText = document.getElementById('unitNo').value;
-          document.getElementById('p-entryDate').innerText = document.getElementById('entryDate').value;
-          document.getElementById('p-orderQty').innerText = document.getElementById('orderQty').value;
-          document.getElementById('p-elecStaff').innerText = document.getElementById('elecStaff').value.toUpperCase();
-
-          let tbody = document.getElementById('p-tbody');
-          if (tbody) {
-            tbody.innerHTML = '';
-            for (let i = 0; i < 25; i++) {
-              const rowData = items[i] || { model: '', serial: '', title: '', remarks: '' };
-              const displayTitle = rowData.title || (i < 4 ? items[i].title : '');
-              tbody.innerHTML += `
-                <tr class="h-4">
-                  <td class="border border-black text-center font-bold bg-gray-50">${i + 1}</td>
-                  <td class="border border-black px-1 font-bold truncate">${rowData.model}</td>
-                  <td class="border border-black px-1 font-bold truncate">${rowData.serial}</td>
-                  <td class="border border-black px-1 truncate">${displayTitle}</td>
-                  <td class="border border-black px-1 truncate">${rowData.remarks}</td>
-                </tr>
-              `;
-            }
-          }
-        }
-      }
-
-      async function toggleCamera() {
-        const video = document.getElementById('video');
-        const preview = document.getElementById('photo-preview');
-        const status = document.getElementById('cam-status');
-        const btn = document.getElementById('btn-cam');
-        const captureBtn = document.getElementById('btn-capture');
-
-        if (mediaStream) {
-          stopCamera();
-          status.innerText = "カメラ停止中";
-          video.classList.remove('hidden');
-          preview.classList.add('hidden');
-          btn.innerText = "📷 カメラ起動";
-          captureBtn.classList.add('hidden');
-          return;
-        }
-
-        try {
-          status.innerText = "カメラ起動中...";
-          mediaStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { 
-              facingMode: 'environment', 
-              width: { ideal: 1920 }, 
-              height: { ideal: 1080 } 
-            } 
-          });
-          video.srcObject = mediaStream;
-          await video.play().catch(() => {});
-          video.classList.remove('hidden');
-          preview.classList.add('hidden');
-          btn.innerText = "⏹ 停止";
-          captureBtn.classList.remove('hidden');
-          status.innerText = "📷 撮影準備完了";
-        } catch (e) {
-          alert('カメラを起動できませんでした。権限をご確認ください。');
-          status.innerText = "起動エラー";
-        }
-      }
-
-      function stopCamera() {
-        if (mediaStream) {
-          mediaStream.getTracks().forEach(t => t.stop());
-          mediaStream = null;
-        }
-      }
-
-      function captureAndAnalyze() {
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const preview = document.getElementById('photo-preview');
-        const status = document.getElementById('cam-status');
-        if (!video || !mediaStream) return;
-
-        const vWidth = video.videoWidth || 1280;
-        const vHeight = video.videoHeight || 720;
-        canvas.width = vWidth;
-        canvas.height = vHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, vWidth, vHeight);
-
-        preview.src = canvas.toDataURL('image/jpeg', 0.90);
-        preview.classList.remove('hidden');
-        video.classList.add('hidden');
-
-        setTimeout(() => {
-          document.getElementById('f-model').value = "JEPMC-PSD3012N-E";
-          document.getElementById('f-serial').value = "D0257K690410020";
-          document.getElementById('f-remarks').value = "A03";
-
-          saveCurrentForm();
-          status.innerText = "✨ 自動解析完了！型式・シリアルをセットしました";
-        }, 300);
-      }
-
-      function loadCSVFile(e) {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          try {
-            const text = event.target.result;
-            const lines = text.split(/\r\n|\n/).map(l => l.trim()).filter(l => l.length > 0);
-            const clean = (val) => val ? val.replace(/^"|"$/g, '').trim().toUpperCase() : '';
-
-            lines.forEach(line => {
-              const cols = line.split(',').map(clean);
-              if (cols[0].includes('製造指図書')) {
-                document.getElementById('docNo').value = cols[1] || '';
-                document.getElementById('customer').value = cols[3] || '';
-              } else if (cols[0] === '機種名') {
-                document.getElementById('modelName').value = cols[1] || '';
-                document.getElementById('unitNo').value = cols[3] || '';
-              } else if (cols[0] === '記入日') {
-                document.getElementById('entryDate').value = cols[1] || document.getElementById('entryDate').value;
-                document.getElementById('orderQty').value = cols[3] || '';
-              } else if (cols[2] === 'エレキ担当') {
-                document.getElementById('elecStaff').value = cols[3] || '';
-              }
-            });
-
-            const headerIdx = lines.findIndex(l => l.includes('No,製品型式') || l.includes('NO,製品型式'));
-            if (headerIdx !== -1) {
-              const itemLines = lines.slice(headerIdx + 1);
-              let newItems = [
-                { title: '電源ユニット', model: '', serial: '', remarks: '' },
-                { title: 'CPU', model: '', serial: '', remarks: '' },
-                { title: 'ベースユニット', model: '', serial: '', remarks: '' },
-                { title: 'LIO-04', model: '', serial: '', remarks: '' }
-              ];
-
-              itemLines.forEach((line, idx) => {
-                if (idx >= 25) return;
-                const match = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
-                const cols = match ? match.map(clean) : [];
-                const no = parseInt(cols[0], 10);
-                if (isNaN(no)) return;
-
-                const rowData = {
-                  model: cols[1] || '',
-                  serial: cols[2] || '',
-                  title: cols[3] || '',
-                  remarks: cols[4] || ''
-                };
-
-                if (no >= 1 && no <= 4) {
-                  newItems[no - 1].model = rowData.model;
-                  newItems[no - 1].serial = rowData.serial;
-                  newItems[no - 1].remarks = rowData.remarks;
-                } else if (no >= 5) {
-                  if (rowData.model || rowData.serial || rowData.title || rowData.remarks) {
-                    newItems.push({
-                      title: rowData.title || '各種機器',
-                      model: rowData.model,
-                      serial: rowData.serial,
-                      remarks: rowData.remarks
-                    });
-                  }
-                }
-              });
-              items = newItems;
-            }
-            alert('CSVファイルからデータを復元しました！');
-            document.getElementById('csvFileInput').value = '';
-          } catch (err) {
-            alert('CSVファイルの読み込みに失敗しました。');
-          }
-        };
-        reader.readAsText(file, 'UTF-8');
-      }
-
-      function saveCSV() {
-        saveCurrentForm();
-        const docNo = document.getElementById('docNo').value.toUpperCase();
-        const modelName = document.getElementById('modelName').value.toUpperCase();
-        const unitNo = document.getElementById('unitNo').value || '1';
-        const filename = `${yy}${mm}${dd}_${modelName || '機種'}_${docNo \vert{}\vert{} '指図書'}_${unitNo}.csv`;
-
-        let csv = "\uFEFF";
-        csv += `製造指図書No,${docNo},客先名,${document.getElementById('customer').value.toUpperCase()}\n`;
-        csv += `機種名,${modelName},号機No,${unitNo}\n`;
-        csv += `記入日,${document.getElementById('entryDate').value},発注台数,${document.getElementById('orderQty').value}\n`;
-        csv += `,,エレキ担当,${document.getElementById('elecStaff').value.toUpperCase()}\n\n`;
-        csv += `No,製品型式,シリアルNo,機器名称,備考\n`;
-
-        for (let i = 0; i < 25; i++) {
-          const it = items[i] || { model: '', serial: '', title: '', remarks: '' };
-          const titleVal = it.title || (i < 4 ? items[i].title : '');
-          csv += `${i+1},"${it.model}","${it.serial}","${titleVal}","${it.remarks}"\n
+          document
