@@ -6,8 +6,6 @@
   <meta name="theme-color" content="#042219" />
   <title>シリアル記入シート - QuickScan DB</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- バーコード解析用ZXingライブラリ -->
-  <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -67,8 +65,8 @@
   <!-- 隠しファイル入力（CSV読込用） -->
   <input type="file" id="csvFileInput" accept=".csv" class="hidden" onchange="loadCSVFile(event)" />
   
-  <!-- スマホ標準カメラを直接起動してファイルとして受け取る隠し入力（バーコード解析用） -->
-  <input type="file" id="barcodeFileCapture" accept="image/*" capture="environment" class="hidden" onchange="processCapturedImage(event)" />
+  <!-- スマホ標準カメラ / バーコード入力用 -->
+  <input type="file" id="nativeCameraInput" accept="image/*" capture="environment" class="hidden" onchange="handleNativeCapture(event)" />
 
   <!-- TOP画面（基本情報） -->
   <div id="view-home" class="space-y-4">
@@ -129,33 +127,33 @@
 
     <h2 id="unit-title" class="text-2xl font-bold text-center text-[#F5D887]">電源ユニット 画面</h2>
 
-    <!-- 各入力フィールドの脇にカメラ撮影ボタンを配置 -->
+    <!-- 各入力フィールドの脇にカメラ・読取補助ボタンを配置 -->
     <div class="bg-[#093325] border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3 shadow-lg">
       <div id="title-field-wrap" class="hidden">
         <div class="flex justify-between items-center mb-1">
           <label class="text-sm font-bold">機器名称</label>
-          <button type="button" onclick="startCameraScan('f-title')" class="bg-[#042219] border border-[#00ffcc] text-[#00ffcc] text-xs px-3 py-1.5 rounded-lg font-bold cursor-pointer hover:bg-[#00ffcc]/10">📷 カメラで読取</button>
+          <button type="button" onclick="openNativeCamera('f-title')" class="bg-[#042219] border border-[#00ffcc] text-[#00ffcc] text-xs px-3 py-1.5 rounded-lg font-bold cursor-pointer hover:bg-[#00ffcc]/10">📷 カメラ起動</button>
         </div>
         <input type="text" id="f-title" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase" placeholder="例: サーボパック" />
       </div>
       <div>
         <div class="flex justify-between items-center mb-1">
           <label class="text-sm font-bold">製品型式</label>
-          <button type="button" onclick="startCameraScan('f-model')" class="bg-[#042219] border border-[#00ffcc] text-[#00ffcc] text-xs px-3 py-1.5 rounded-lg font-bold cursor-pointer hover:bg-[#00ffcc]/10">📷 カメラで読取</button>
+          <button type="button" onclick="openNativeCamera('f-model')" class="bg-[#042219] border border-[#00ffcc] text-[#00ffcc] text-xs px-3 py-1.5 rounded-lg font-bold cursor-pointer hover:bg-[#00ffcc]/10">📷 カメラ起動</button>
         </div>
         <input type="text" id="f-model" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase" placeholder="型式" />
       </div>
       <div>
         <div class="flex justify-between items-center mb-1">
           <label class="text-sm font-bold">シリアルNo</label>
-          <button type="button" onclick="startCameraScan('f-serial')" class="bg-[#042219] border border-[#00ffcc] text-[#00ffcc] text-xs px-3 py-1.5 rounded-lg font-bold cursor-pointer hover:bg-[#00ffcc]/10">📷 カメラで読取</button>
+          <button type="button" onclick="openNativeCamera('f-serial')" class="bg-[#042219] border border-[#00ffcc] text-[#00ffcc] text-xs px-3 py-1.5 rounded-lg font-bold cursor-pointer hover:bg-[#00ffcc]/10">📷 カメラ起動</button>
         </div>
         <input type="text" id="f-serial" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase" placeholder="シリアル" />
       </div>
       <div>
         <div class="flex justify-between items-center mb-1">
           <label class="text-sm font-bold">備考 (バージョン情報等)</label>
-          <button type="button" onclick="startCameraScan('f-remarks')" class="bg-[#042219] border border-[#00ffcc] text-[#00ffcc] text-xs px-3 py-1.5 rounded-lg font-bold cursor-pointer hover:bg-[#00ffcc]/10">📷 カメラで読取</button>
+          <button type="button" onclick="openNativeCamera('f-remarks')" class="bg-[#042219] border border-[#00ffcc] text-[#00ffcc] text-xs px-3 py-1.5 rounded-lg font-bold cursor-pointer hover:bg-[#00ffcc]/10">📷 カメラ起動</button>
         </div>
         <input type="text" id="f-remarks" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase" placeholder="例: A03" />
       </div>
@@ -241,13 +239,6 @@
     let currentStep = 0;
     let isStarted = false;
     let targetFieldId = null;
-    let codeReader = null;
-
-    try {
-      if (typeof ZXing !== 'undefined') {
-        codeReader = new ZXing.BrowserBarcodeReader();
-      }
-    } catch(e) {}
 
     function saveCurrentForm() {
       if (isStarted && currentStep >= 0 && currentStep < items.length && currentStep !== 999) {
@@ -377,47 +368,24 @@
       setTimeout(() => { window.print(); }, 100);
     }
 
-    // カメラボタンが押されたら対象フィールドを記憶してスマホ標準カメラを起動
-    function startCameraScan(fieldId) {
+    // カメラボタンでスマホ標準カメラを起動し、対象フィールドを記憶
+    function openNativeCamera(fieldId) {
       targetFieldId = fieldId;
-      document.getElementById('barcodeFileCapture').click();
+      document.getElementById('nativeCameraInput').click();
     }
 
-    // 撮影された画像ファイルをZXingライブラリで解析し、テキストを自動入力
-    async function processCapturedImage(e) {
+    // 撮影後、対象の入力欄にフォーカスを当ててスムーズに入力（または他のリーダーアプリでコピーした内容をペースト）できるようにする
+    function handleNativeCapture(e) {
       const file = e.target.files?.[0];
       if (!file || !targetFieldId) return;
 
-      try {
-        if (!codeReader) {
-          codeReader = new ZXing.BrowserBarcodeReader();
-        }
-
-        // 画像ファイルをURLオブジェクトに変換して解析
-        const imageUrl = URL.createObjectURL(file);
-        
-        // ZXingで画像からバーコードをデコード
-        const result = await codeReader.decodeFromImageUrl(imageUrl);
-        
-        if (result && result.text) {
-          const scannedText = result.text.trim().toUpperCase();
-          const targetInput = document.getElementById(targetFieldId);
-          if (targetInput) {
-            targetInput.value = scannedText;
-            saveCurrentForm();
-          }
-          alert(`✨ 読取成功: ${scannedText}`);
-        } else {
-          alert("⚠️ バーコードが検出されませんでした。もう一度撮影してください。");
-        }
-        
-        URL.revokeObjectURL(imageUrl);
-      } catch (err) {
-        alert("⚠️ 読取に失敗しました。バーコードにしっかり合わせて撮影してください。");
+      const targetInput = document.getElementById(targetFieldId);
+      if (targetInput) {
+        targetInput.focus();
+        // クリップボードにリーダーアプリ等で読み取ったデータがあれば、もし可能ならペーストを促す
+        targetInput.placeholder = "ここに貼り付け(長押しタップ)";
       }
-
-      // ファイル入力をリセット（同じファイルを連続で撮れるようにする）
-      document.getElementById('barcodeFileCapture').value = '';
+      document.getElementById('nativeCameraInput').value = '';
     }
 
     function loadCSVFile(e) {
