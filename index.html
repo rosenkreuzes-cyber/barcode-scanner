@@ -142,8 +142,7 @@
       </div>
       <div class="flex gap-2 pt-1">
         <button type="button" onclick="captureAndScanBarcode()" class="flex-1 bg-[#F5D887] text-[#042219] font-bold py-1.5 rounded-lg text-sm shadow cursor-pointer">📸 撮影して読取</button>
-        <button type="button" onclick="retryScan()" class="bg-[#093325] border border-[#E6DAA6] text-[#E6DAA6] font-bold px-3 py-1.5 rounded-lg text-sm cursor-pointer">🔄 再読込</button>
-        <button type="button" onclick="confirmScan()" class="bg-[#00ffcc] text-[#042219] font-bold px-4 py-1.5 rounded-lg text-sm shadow cursor-pointer">✓ 決定</button>
+        <button type="button" onclick="retryScan()" class="bg-[#093325] border border-[#E6DAA6] text-[#E6DAA6] font-bold px-4 py-1.5 rounded-lg text-sm cursor-pointer">🔄 再撮影</button>
       </div>
     </div>
 
@@ -261,7 +260,6 @@
     let mediaStream = null;
     let codeReader = null;
     let activeTargetFieldId = null; 
-    let scannedTemporaryValue = ""; 
 
     try {
       if (typeof ZXing !== 'undefined') {
@@ -408,7 +406,6 @@
 
     async function openCameraFor(fieldId) {
       activeTargetFieldId = fieldId;
-      scannedTemporaryValue = "";
       const container = document.getElementById('camera-container');
       const video = document.getElementById('video');
       const preview = document.getElementById('photo-preview');
@@ -446,7 +443,7 @@
       activeTargetFieldId = null;
     }
 
-    // 撮影してバーコード解析（結果を明確に表示・反映）
+    // 撮影してバーコード解析（成功したら即時反映してカメラを閉じる）
     async function captureAndScanBarcode() {
       const video = document.getElementById('video');
       const canvas = document.getElementById('canvas');
@@ -467,7 +464,7 @@
       preview.src = canvas.toDataURL('image/jpeg', 0.95);
       preview.classList.remove('hidden');
       video.classList.add('hidden');
-      status.innerText = "🔍 バーコード解析中...";
+      status.innerText = "🔍 解析中...";
 
       try {
         if (!codeReader) {
@@ -477,18 +474,23 @@
         // ZXingで静止画をデコード
         const result = await codeReader.decodeFromImage(undefined, canvas);
         if (result && result.text) {
-          scannedTemporaryValue = result.text.trim().toUpperCase();
-          status.innerText = `✅ 読取成功: ${scannedTemporaryValue} (「決定」を押してください)`;
+          const scannedText = result.text.trim().toUpperCase();
+          status.innerText = `✅ 読取成功: ${scannedText}`;
           
-          // すぐに入力欄に仮セット
           if (activeTargetFieldId) {
-            document.getElementById(activeTargetFieldId).value = scannedTemporaryValue;
+            document.getElementById(activeTargetFieldId).value = scannedText;
+            saveCurrentForm();
           }
+
+          // 成功時は0.5秒後に自動でカメラを閉じる
+          setTimeout(() => {
+            closeCamera();
+          }, 500);
         } else {
-          status.innerText = "⚠️ バーコード未検出。「再読込」で再撮影してください。";
+          status.innerText = "⚠️ バーコード未検出。「再撮影」でやり直してください。";
         }
       } catch (err) {
-        status.innerText = "⚠️ 検出失敗（バーコードを枠内に合わせてください）";
+        status.innerText = "⚠️ 検出失敗。「再撮影」でバーコードを枠内に合わせてください。";
       }
     }
 
@@ -500,20 +502,6 @@
       preview.classList.add('hidden');
       video.classList.remove('hidden');
       status.innerText = "🎯 再度バーコードを合わせてください";
-    }
-
-    function confirmScan() {
-      if (activeTargetFieldId) {
-        const val = document.getElementById(activeTargetFieldId).value;
-        if (val) {
-          scannedTemporaryValue = val.trim().toUpperCase();
-        }
-        if (scannedTemporaryValue) {
-          document.getElementById(activeTargetFieldId).value = scannedTemporaryValue;
-          saveCurrentForm();
-        }
-      }
-      closeCamera();
     }
 
     function loadCSVFile(e) {
