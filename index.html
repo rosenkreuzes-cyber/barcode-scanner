@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB (1ページ完全固定版)</title>
+  <title>QuickScan DB - Android / iPhone対応</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -18,46 +18,30 @@
     }
     input { color-scheme: dark; text-transform: uppercase; }
 
-    /* A4縦サイズ1ページに確実に完全収容し、2ページ目を完全に排除する印刷設定 */
+    /* スマートフォンの印刷画面でもA4縦1枚に収める */
+    @page { size: A4 portrait; margin: 10mm; }
     @media print {
-      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      html, body {
-        background: white !important;
-        color: black !important;
-        width: 100% !important;
-        height: 100% !important;
-        overflow: hidden !important;
-      }
-      .no-print { display: none !important; }
-      .print-area {
-        display: block !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        box-shadow: none !important;
-        background: white !important;
-      }
-      table {
-        width: 100% !important;
-        border-collapse: collapse !important;
-        table-layout: fixed !important;
-      }
-      th, td {
-        border: 1px solid #000 !important;
-        padding: 2px 4px !important;
-        font-size: 9.5px !important;
-        line-height: 1.1 !important;
-        color: black !important;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      th { background-color: #f2f2f2 !important; }
-      @page {
-        size: A4 portrait;
-        margin: 4mm;
-      }
+      html, body { display: block !important; width: 100% !important; height: auto !important;
+        min-height: 0 !important; max-width: none !important; margin: 0 !important;
+        padding: 0 !important; overflow: visible !important; background: #fff !important;
+        color: #000 !important; }
+      #view-home, #view-input, .no-print, #csvFileInput { display: none !important; }
+      #view-result { display: block !important; margin: 0 !important; padding: 0 !important;
+        width: 100% !important; }
+      .print-area { display: block !important; margin: 0 !important; padding: 0 !important;
+        width: 100% !important; max-width: none !important; background: white !important;
+        box-shadow: none !important; border-radius: 0 !important; }
+      .print-area h1 { font-size: 12pt !important; line-height: 7mm !important;
+        margin: 0 0 2mm !important; padding: 0 !important; }
+      .print-area table { width: 100% !important; border-collapse: collapse !important;
+        table-layout: fixed !important; margin: 0 0 2mm !important; }
+      .print-area tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+      .print-area th, .print-area td { border: .25mm solid #000 !important;
+        height: 7mm !important; max-height: 7mm !important; padding: .5mm 1mm !important;
+        font-size: 8pt !important; line-height: 1.1 !important; white-space: nowrap !important;
+        overflow: hidden !important; text-overflow: ellipsis !important; color: black !important; }
+      .print-area th { background: #eee !important; }
+      .print-area thead { display: table-header-group !important; }
     }
   </style>
 </head>
@@ -136,7 +120,7 @@
       </div>
       <div class="flex gap-2">
         <button type="button" id="btn-cam" onclick="toggleCamera()" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base cursor-pointer">📷 カメラ起動</button>
-        <button type="button" id="btn-capture" onclick="captureAndAnalyze()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影して自動入力</button>
+        <button type="button" id="btn-capture" onclick="captureAndAnalyze()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影してバーコード読取</button>
       </div>
     </div>
 
@@ -317,10 +301,10 @@
             tbody.innerHTML += `
               <tr class="h-[15px]">
                 <td class="border border-black text-center font-bold bg-gray-50">${i + 1}</td>
-                <td class="border border-black px-1 font-bold truncate">${rowData.model}</td>
-                <td class="border border-black px-1 font-bold truncate">${rowData.serial}</td>
-                <td class="border border-black px-1 truncate">${displayTitle}</td>
-                <td class="border border-black px-1 truncate">${rowData.remarks}</td>
+                <td class="border border-black px-1 font-bold truncate">${escapeHTML(rowData.model)}</td>
+                <td class="border border-black px-1 font-bold truncate">${escapeHTML(rowData.serial)}</td>
+                <td class="border border-black px-1 truncate">${escapeHTML(displayTitle)}</td>
+                <td class="border border-black px-1 truncate">${escapeHTML(rowData.remarks)}</td>
               </tr>
             `;
           }
@@ -375,9 +359,7 @@
     }
 
     function triggerPrint() {
-      setTimeout(() => {
-        window.print();
-      }, 100);
+      window.print();
     }
 
     async function toggleCamera() {
@@ -423,35 +405,61 @@
       if (mediaStream) {
         mediaStream.getTracks().forEach(t => t.stop());
         mediaStream = null;
+        document.getElementById('video').srcObject = null;
       }
     }
 
-    function captureAndAnalyze() {
+    // Android Chrome は BarcodeDetector、iPhone Safari 等は ZXing を利用。
+    // どちらも失敗した場合は手入力に切り替えられる。
+    let zxingLoading = null;
+    function loadZXing() {
+      if (window.ZXing && window.ZXing.BrowserMultiFormatReader) return Promise.resolve();
+      if (!zxingLoading) zxingLoading = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+        script.onload = () => window.ZXing ? resolve() : reject(new Error('ZXing unavailable'));
+        script.onerror = () => reject(new Error('ZXing load failed'));
+        document.head.appendChild(script);
+      }).catch(err => { zxingLoading = null; throw err; });
+      return zxingLoading;
+    }
+
+    async function captureAndAnalyze() {
       const video = document.getElementById('video');
       const canvas = document.getElementById('canvas');
       const preview = document.getElementById('photo-preview');
       const status = document.getElementById('cam-status');
-      if (!video || !mediaStream) return;
-
-      const vWidth = video.videoWidth || 1280;
-      const vHeight = video.videoHeight || 720;
-      canvas.width = vWidth;
-      canvas.height = vHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, vWidth, vHeight);
-
-      preview.src = canvas.toDataURL('image/jpeg', 0.90);
+      if (!video || !mediaStream || !video.videoWidth) return;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0);
+      preview.src = canvas.toDataURL('image/jpeg', .92);
       preview.classList.remove('hidden');
       video.classList.add('hidden');
-
-      setTimeout(() => {
-        document.getElementById('f-model').value = "JEPMC-PSD3012N-E";
-        document.getElementById('f-serial').value = "D0257K690410020";
-        document.getElementById('f-remarks').value = "A03";
-
+      status.innerText = 'バーコード解析中…';
+      let value = '';
+      try {
+        if ('BarcodeDetector' in window) {
+          const detector = new BarcodeDetector();
+          const found = await detector.detect(canvas);
+          if (found.length) value = found[0].rawValue || '';
+        }
+      } catch (err) { console.warn('Native barcode reader:', err); }
+      if (!value) {
+        try {
+          await loadZXing();
+          const reader = new window.ZXing.BrowserMultiFormatReader();
+          const result = await reader.decodeFromImageUrl(preview.src);
+          value = result?.getText?.() || result?.text || '';
+        } catch (err) { console.warn('ZXing barcode reader:', err); }
+      }
+      if (value) {
+        document.getElementById('f-serial').value = value.trim().toUpperCase();
         saveCurrentForm();
-        status.innerText = "✨ 自動解析完了！型式・シリアルをセットしました";
-      }, 300);
+        status.innerText = '読取成功：シリアルNoを確認してください';
+      } else {
+        status.innerText = '読取できませんでした。再撮影または手入力してください';
+      }
     }
 
     function loadCSVFile(e) {
@@ -556,7 +564,7 @@
       a.href = url;
       a.download = filename;
       a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     window.addEventListener('DOMContentLoaded', () => {
