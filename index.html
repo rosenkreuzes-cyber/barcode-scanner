@@ -65,7 +65,7 @@
 <body class="p-3 max-w-xl mx-auto w-full">
 
   <!-- 隠しファイル入力（CSV読込用） -->
-  <input type="file" id="csvFileInput" accept=".csv" class="hidden" onchange="loadCSVFile(event)" />
+  <input type="file" id="csvFileInput" accept=".csv" class="hidden" />
 
   <!-- TOP画面（基本情報） -->
   <div id="view-home" class="space-y-4">
@@ -74,7 +74,7 @@
 
     <div class="bg-[#093325] border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3 shadow-lg">
       <div>
-        <button type="button" onclick="document.getElementById('csvFileInput').click()" class="w-full bg-[#093325] border-2 border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">
+        <button type="button" id="btn-load-csv" class="w-full bg-[#093325] border-2 border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">
           📂 保存済みCSVを読み込んで編集・追記
         </button>
       </div>
@@ -115,15 +115,15 @@
       </div>
     </div>
 
-    <button type="button" onclick="goToInput()" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-xl mt-4 cursor-pointer">入力を開始 (電源ユニットへ)</button>
+    <button type="button" id="btn-start" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-xl mt-4 cursor-pointer">入力を開始 (電源ユニットへ)</button>
   </div>
 
   <!-- ユニット入力画面 -->
   <div id="view-input" class="hidden space-y-3">
     <div class="flex justify-between items-center text-base text-[#E6DAA6] font-bold">
-      <button type="button" onclick="prevStep()" class="hover:underline cursor-pointer">← 前へ</button>
+      <button type="button" id="btn-prev" class="hover:underline cursor-pointer">← 前へ</button>
       <span id="step-indicator">1 / 5</span>
-      <button type="button" onclick="goToTop()" class="hover:underline text-[#F5D887] cursor-pointer">🏠 TOP</button>
+      <button type="button" id="btn-top" class="hover:underline text-[#F5D887] cursor-pointer">🏠 TOP</button>
     </div>
 
     <h2 id="unit-title" class="text-2xl font-bold text-center text-[#F5D887]">電源ユニット 画面</h2>
@@ -136,8 +136,8 @@
         <canvas id="canvas" class="hidden"></canvas>
       </div>
       <div class="flex gap-2">
-        <button type="button" id="btn-cam" onclick="toggleCamera()" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base cursor-pointer">📷 カメラ起動</button>
-        <button type="button" id="btn-capture" onclick="captureAndScanBarcode()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影してバーコード読取</button>
+        <button type="button" id="btn-cam" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base cursor-pointer">📷 カメラ起動</button>
+        <button type="button" id="btn-capture" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影してバーコード読取</button>
       </div>
     </div>
 
@@ -160,22 +160,21 @@
       </div>
     </div>
 
-    <!-- 機器追加ボタン（LIO-04含む3番目以降の画面で常時表示） -->
     <div id="add-btn-wrap" class="hidden">
-      <button type="button" onclick="addDevice()" class="w-full border border-dashed border-[#00ffcc] text-[#00ffcc] py-3 rounded-xl text-base font-bold bg-[#00ffcc]/10 shadow-md cursor-pointer">＋ 機器追加 (各種機器画面へ)</button>
+      <button type="button" id="btn-add-device" class="w-full border border-dashed border-[#00ffcc] text-[#00ffcc] py-3 rounded-xl text-base font-bold bg-[#00ffcc]/10 shadow-md cursor-pointer">＋ 機器追加 (各種機器画面へ)</button>
     </div>
 
-    <button type="button" onclick="nextStep()" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-lg cursor-pointer">次へ</button>
+    <button type="button" id="btn-next" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-lg cursor-pointer">次へ</button>
   </div>
 
   <!-- 印刷プレビュー画面 -->
   <div id="view-result" class="hidden space-y-2">
     <div class="no-print flex flex-wrap justify-between items-center gap-2 mb-2">
-      <button type="button" onclick="goToInput()" class="text-[#E6DAA6] font-bold cursor-pointer">← 修正に戻る</button>
+      <button type="button" id="btn-back-edit" class="text-[#E6DAA6] font-bold cursor-pointer">← 修正に戻る</button>
       <div class="flex gap-2">
-        <button type="button" onclick="document.getElementById('csvFileInput').click()" class="bg-[#093325] border border-[#E6DAA6] text-[#E6DAA6] font-bold px-3 py-2 rounded-full text-sm cursor-pointer">📂 読込</button>
-        <button type="button" onclick="saveCSV()" class="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-4 py-2 rounded-full text-sm cursor-pointer">💾 CSV保存</button>
-        <button type="button" onclick="triggerPrint()" class="bg-[#F5D887] text-[#042219] font-bold px-4 py-2 rounded-full text-sm shadow-md cursor-pointer">🖨 印刷</button>
+        <button type="button" id="btn-load-csv-res" class="bg-[#093325] border border-[#E6DAA6] text-[#E6DAA6] font-bold px-3 py-2 rounded-full text-sm cursor-pointer">📂 読込</button>
+        <button type="button" id="btn-save-csv" class="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-4 py-2 rounded-full text-sm cursor-pointer">💾 CSV保存</button>
+        <button type="button" id="btn-print" class="bg-[#F5D887] text-[#042219] font-bold px-4 py-2 rounded-full text-sm shadow-md cursor-pointer">🖨 印刷</button>
       </div>
     </div>
 
@@ -187,4 +186,57 @@
           <tr>
             <th class="border border-black p-0.5 bg-gray-100 w-20">製造指図書No</th>
             <td id="p-docNo" class="border border-black p-0.5 font-bold truncate"></td>
-            <th class="border border-black p-0.5 bg-gray-100 w-1
+            <th class="border border-black p-0.5 bg-gray-100 w-14">客先名</th>
+            <td id="p-customer" class="border border-black p-0.5 truncate"></td>
+          </tr>
+          <tr>
+            <th class="border border-black p-0.5 bg-gray-100">機種名</th>
+            <td id="p-modelName" class="border border-black p-0.5 font-bold truncate"></td>
+            <th class="border border-black p-0.5 bg-gray-100">号機No</th>
+            <td id="p-unitNo" class="border border-black p-0.5 truncate"></td>
+          </tr>
+          <tr>
+            <th class="border border-black p-0.5 bg-gray-100">記入日</th>
+            <td id="p-entryDate" class="border border-black p-0.5 truncate"></td>
+            <th class="border border-black p-0.5 bg-gray-100">発注台数</th>
+            <td id="p-orderQty" class="border border-black p-0.5 truncate"></td>
+          </tr>
+          <tr>
+            <th class="border border-black p-0.5 bg-gray-100" colspan="2"></th>
+            <th class="border border-black p-0.5 bg-gray-100">エレキ担当</th>
+            <td id="p-elecStaff" class="border border-black p-0.5 truncate"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table class="w-full text-[10px] border-collapse border border-black table-fixed">
+        <thead>
+          <tr class="bg-gray-200">
+            <th class="border border-black p-0.5 text-center w-6">No</th>
+            <th class="border border-black p-0.5 w-[28%]">製品型式</th>
+            <th class="border border-black p-0.5 w-[28%]">シリアルNo</th>
+            <th class="border border-black p-0.5 w-[18%]">機器名称</th>
+            <th class="border border-black p-0.5">備考</th>
+          </tr>
+        </thead>
+        <tbody id="p-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const now = new Date();
+    const yy = String(now.getFullYear()).slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+
+    let items = [
+      { title: '電源ユニット', model: '', serial: '', remarks: '' },
+      { title: 'CPU', model: '', serial: '', remarks: '' },
+      { title: 'ベースユニット', model: '', serial: '', remarks: '' },
+      { title: 'LIO-04', model: '', serial: '', remarks: '' }
+    ];
+    let currentStep = 0;
+    let isStarted = false;
+    let mediaStream = null;
+    let codeReader
