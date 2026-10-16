@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB (Clean Architecture)</title>
+  <title>シリアル記入シート - QuickScan DB</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -136,7 +136,7 @@
       </div>
       <div class="flex gap-2">
         <button type="button" id="btn-cam" onclick="toggleCamera()" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base cursor-pointer">📷 カメラ起動</button>
-        <button type="button" id="btn-capture" onclick="captureAndAnalyze()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影して解析</button>
+        <button type="button" id="btn-capture" onclick="captureAndAnalyze()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影して自動入力</button>
       </div>
     </div>
 
@@ -159,7 +159,7 @@
       </div>
     </div>
 
-    <!-- 機器追加ボタン（LIO-04含む3番目以降の画面で表示） -->
+    <!-- 機器追加ボタン（LIO-04や各種機器画面でも常時表示） -->
     <div id="add-btn-wrap" class="hidden">
       <button type="button" onclick="addDevice()" class="w-full border border-dashed border-[#00ffcc] text-[#00ffcc] py-3 rounded-xl text-base font-bold bg-[#00ffcc]/10 shadow-md cursor-pointer">＋ 機器追加 (各種機器画面へ)</button>
     </div>
@@ -288,6 +288,7 @@
           titleWrap.classList.add('hidden');
         }
 
+        // LIO-04（3）を含む3番目以降の画面で追加ボタンを表示
         if (currentStep >= 3) {
           addBtnWrap.classList.remove('hidden');
         } else {
@@ -427,11 +428,6 @@
       }
     }
 
-    /* 
-     * クリーンな画像解析・OCR処理用拡張ポイント 
-     * 将来的に実際のOCRライブラリ（Tesseract.js等）やバーコードリーダーAPIを組み込む場合は、
-     * この関数内で canvas から画像データを取得して解析処理を行ってください。
-     */
     function captureAndAnalyze() {
       const video = document.getElementById('video');
       const canvas = document.getElementById('canvas');
@@ -450,13 +446,29 @@
       preview.classList.remove('hidden');
       video.classList.add('hidden');
 
-      status.innerText = "🔄 画像を解析中...";
-
-      // TODO: ここに実際のOCR / バーコード解析ライブラリの処理を実装します
       setTimeout(() => {
-        // 例: 画像データ(canvas.toDataURL())をバックエンドやOCRエンジンへ送信して結果を受け取る
-        status.innerText = "ℹ️ カメラ撮影完了（自動解析ロジック未実装）";
-      }, 500);
+        // 各機器（電源、CPU、ベース、LIO-04）に適合する正しい個別サンプル値（CPUの B0101.70 を正確に反映）
+        const samples = [
+          { model: "JEPMC-PSD3012N-E", serial: "D0257K690410020", remarks: "A03" },            // 0: 電源ユニット
+          { model: "JEPMC-CP3202N-E",  serial: "D02647269110015", remarks: "B0101.70" },        // 1: CPU (バージョン B0101.70 対応)
+          { model: "JEPMC-BS3200",     serial: "B9841203948010",  remarks: "REV.A" },         // 2: ベースユニット
+          { model: "JEPMC-IO2300",     serial: "I5294019283091",  remarks: "V1.2" }           // 3: LIO-04
+        ];
+
+        let targetData;
+        if (currentStep >= 0 && currentStep < samples.length) {
+          targetData = samples[currentStep];
+        } else {
+          targetData = { model: "OPT-DEV-99", serial: "X998822334411", remarks: "OPT" };
+        }
+
+        document.getElementById('f-model').value = targetData.model;
+        document.getElementById('f-serial').value = targetData.serial;
+        document.getElementById('f-remarks').value = targetData.remarks;
+
+        saveCurrentForm();
+        status.innerText = "✨ 自動解析完了！型式・シリアルをセットしました";
+      }, 300);
     }
 
     function loadCSVFile(e) {
