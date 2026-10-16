@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB (全ボタン完全動作版)</title>
+  <title>シリアル記入シート - QuickScan DB (1ページ完全固定版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -18,7 +18,7 @@
     }
     input { color-scheme: dark; text-transform: uppercase; }
 
-    /* A4縦1ページに確実に収めるための印刷設定 */
+    /* A4縦1ページに確実に収めるための印刷設定 (はみ出し完全防止) */
     @media print {
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       html, body {
@@ -33,7 +33,7 @@
         width: 100% !important;
         max-width: 100% !important;
         margin: 0 !important;
-        padding: 2mm !important;
+        padding: 1mm !important;
         box-shadow: none !important;
         background: white !important;
       }
@@ -44,18 +44,18 @@
       }
       th, td {
         border: 1px solid #000 !important;
-        padding: 2px 3px !important;
-        font-size: 8px !important;
-        line-height: 1.1 !important;
+        padding: 1.5px 2px !important;
+        font-size: 7.5px !important;
+        line-height: 1.0 !important;
         color: black !important;
-        white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        white-space: nowrap;
       }
       th { background-color: #f2f2f2 !important; }
       @page {
         size: A4 portrait;
-        margin: 5mm;
+        margin: 3mm;
       }
     }
   </style>
@@ -166,7 +166,7 @@
   </div>
 
   <!-- 印刷プレビュー画面 -->
-  <div id="view-result" class="hidden space-y-3">
+  <div id="view-result" class="hidden space-y-2">
     <div class="no-print flex flex-wrap justify-between items-center gap-2 mb-2">
       <button type="button" id="btn-back-edit" class="text-[#E6DAA6] font-bold cursor-pointer">← 修正に戻る</button>
       <div class="flex gap-2">
@@ -176,44 +176,45 @@
       </div>
     </div>
 
-    <div class="print-area bg-white text-black p-3 rounded-lg shadow-xl w-full overflow-x-auto">
-      <h1 class="text-center font-bold text-lg mb-2 border-b-2 border-black pb-1">シリアル記入シート</h1>
-      <table class="w-full text-xs border-collapse border border-black mb-2 min-w-[500px]">
+    <!-- 横幅のはみ出しを防ぎ、完全フィットさせる印刷エリア -->
+    <div class="print-area bg-white text-black p-2 rounded-lg shadow-xl w-full">
+      <h1 class="text-center font-bold text-base mb-1 border-b-2 border-black pb-0.5">シリアル記入シート</h1>
+      <table class="w-full text-[10px] border-collapse border border-black mb-1 table-fixed">
         <tbody>
           <tr>
-            <th class="border border-black p-1 bg-gray-100 w-24">製造指図書No</th>
-            <td id="p-docNo" class="border border-black p-1 font-bold"></td>
-            <th class="border border-black p-1 bg-gray-100 w-16">客先名</th>
-            <td id="p-customer" class="border border-black p-1"></td>
+            <th class="border border-black p-0.5 bg-gray-100 w-20">製造指図書No</th>
+            <td id="p-docNo" class="border border-black p-0.5 font-bold truncate"></td>
+            <th class="border border-black p-0.5 bg-gray-100 w-14">客先名</th>
+            <td id="p-customer" class="border border-black p-0.5 truncate"></td>
           </tr>
           <tr>
-            <th class="border border-black p-1 bg-gray-100">機種名</th>
-            <td id="p-modelName" class="border border-black p-1 font-bold"></td>
-            <th class="border border-black p-1 bg-gray-100">号機No</th>
-            <td id="p-unitNo" class="border border-black p-1"></td>
+            <th class="border border-black p-0.5 bg-gray-100">機種名</th>
+            <td id="p-modelName" class="border border-black p-0.5 font-bold truncate"></td>
+            <th class="border border-black p-0.5 bg-gray-100">号機No</th>
+            <td id="p-unitNo" class="border border-black p-0.5 truncate"></td>
           </tr>
           <tr>
-            <th class="border border-black p-1 bg-gray-100">記入日</th>
-            <td id="p-entryDate" class="border border-black p-1"></td>
-            <th class="border border-black p-1 bg-gray-100">発注台数</th>
-            <td id="p-orderQty" class="border border-black p-1"></td>
+            <th class="border border-black p-0.5 bg-gray-100">記入日</th>
+            <td id="p-entryDate" class="border border-black p-0.5 truncate"></td>
+            <th class="border border-black p-0.5 bg-gray-100">発注台数</th>
+            <td id="p-orderQty" class="border border-black p-0.5 truncate"></td>
           </tr>
           <tr>
-            <th class="border border-black p-1 bg-gray-100" colspan="2"></th>
-            <th class="border border-black p-1 bg-gray-100">エレキ担当</th>
-            <td id="p-elecStaff" class="border border-black p-1"></td>
+            <th class="border border-black p-0.5 bg-gray-100" colspan="2"></th>
+            <th class="border border-black p-0.5 bg-gray-100">エレキ担当</th>
+            <td id="p-elecStaff" class="border border-black p-0.5 truncate"></td>
           </tr>
         </tbody>
       </table>
 
-      <table class="w-full text-xs border-collapse border border-black min-w-[500px]">
+      <table class="w-full text-[10px] border-collapse border border-black table-fixed">
         <thead>
           <tr class="bg-gray-200">
-            <th class="border border-black p-1 text-center w-8">No</th>
-            <th class="border border-black p-1 w-36">製品型式</th>
-            <th class="border border-black p-1 w-36">シリアルNo</th>
-            <th class="border border-black p-1 w-24">機器名称</th>
-            <th class="border border-black p-1">備考</th>
+            <th class="border border-black p-0.5 text-center w-7">No</th>
+            <th class="border border-black p-0.5 w-[28%]">製品型式</th>
+            <th class="border border-black p-0.5 w-[28%]">シリアルNo</th>
+            <th class="border border-black p-0.5 w-[18%]">機器名称</th>
+            <th class="border border-black p-0.5">備考</th>
           </tr>
         </thead>
         <tbody id="p-tbody"></tbody>
@@ -295,7 +296,6 @@
         video.classList.remove('hidden');
         document.getElementById('photo-preview').classList.add('hidden');
         document.getElementById('btn-capture').classList.add('hidden');
-        document.getElementById('btn-cam').innerText = "📷 カメラ起動";
         document.getElementById('cam-status').innerText = "カメラ停止中";
       } else {
         viewResult.classList.remove('hidden');
@@ -314,12 +314,12 @@
             const rowData = items[i] || { model: '', serial: '', title: '', remarks: '' };
             const displayTitle = rowData.title || (i < 4 ? items[i].title : '');
             tbody.innerHTML += `
-              <tr class="h-6">
+              <tr class="h-4">
                 <td class="border border-black text-center font-bold bg-gray-50">${i + 1}</td>
-                <td class="border border-black px-1 font-bold">${rowData.model}</td>
-                <td class="border border-black px-1 font-bold">${rowData.serial}</td>
-                <td class="border border-black px-1">${displayTitle}</td>
-                <td class="border border-black px-1">${rowData.remarks}</td>
+                <td class="border border-black px-1 font-bold truncate">${rowData.model}</td>
+                <td class="border border-black px-1 font-bold truncate">${rowData.serial}</td>
+                <td class="border border-black px-1 truncate">${displayTitle}</td>
+                <td class="border border-black px-1 truncate">${rowData.remarks}</td>
               </tr>
             `;
           }
@@ -534,4 +534,61 @@
       csv += `製造指図書No,${docNo},客先名,${document.getElementById('customer').value.toUpperCase()}\n`;
       csv += `機種名,${modelName},号機No,${unitNo}\n`;
       csv += `記入日,${document.getElementById('entryDate').value},発注台数,${document.getElementById('orderQty').value}\n`;
-      csv +=
+      csv += `,,エレキ担当,${document.getElementById('elecStaff').value.toUpperCase()}\n\n`;
+      csv += `No,製品型式,シリアルNo,機器名称,備考\n`;
+
+      for (let i = 0; i < 25; i++) {
+        const it = items[i] || { model: '', serial: '', title: '', remarks: '' };
+        const titleVal = it.title || (i < 4 ? items[i].title : '');
+        csv += `${i+1},"${it.model}","${it.serial}","${titleVal}","${it.remarks}"\n`;
+      }
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const entryDateEl = document.getElementById('entryDate');
+      if (entryDateEl) {
+        entryDateEl.value = `${now.getFullYear()}/${mm}/${dd}`;
+      }
+
+      const bind = (id, fn) => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.addEventListener('click', (e) => {
+            e.preventDefault();
+            fn();
+          });
+        }
+      };
+
+      bind('btn-start', goToInput);
+      bind('btn-top', goToTop);
+      bind('btn-prev', prevStep);
+      bind('btn-next', nextStep);
+      bind('btn-add-device', addDevice);
+      bind('btn-cam', toggleCamera);
+      bind('btn-capture', captureAndAnalyze);
+      bind('btn-back-edit', goToInput);
+      bind('btn-save-csv', saveCSV);
+      bind('btn-print', () => window.print());
+
+      const loadBtn1 = document.getElementById('btn-load-csv');
+      const loadBtn2 = document.getElementById('btn-load-csv-2');
+      const csvInput = document.getElementById('csvFileInput');
+
+      if (loadBtn1 && csvInput) loadBtn1.addEventListener('click', () => csvInput.click());
+      if (loadBtn2 && csvInput) loadBtn2.addEventListener('click', () => csvInput.click());
+      if (csvInput) csvInput.addEventListener('change', loadCSVFile);
+
+      render();
+    });
+  </script>
+</body>
+</html>
