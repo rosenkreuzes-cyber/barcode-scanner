@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB</title>
+  <title>シリアル記入シート - QuickScan DB (撮影読取仕様)</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- ZXingライブラリ（バーコードスキャン用） -->
+  <!-- ZXingライブラリ（静止画からのバーコードデコード用） -->
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -130,13 +130,15 @@
     <h2 id="unit-title" class="text-2xl font-bold text-center text-[#F5D887]">電源ユニット 画面</h2>
 
     <div class="w-full text-center mb-2">
-      <!-- バーコードスキャン用ビデオプレビュー -->
       <div class="relative w-full h-56 bg-black overflow-hidden flex items-center justify-center mb-2 rounded-xl">
-        <video id="video" playsInline class="w-full h-full object-cover"></video>
-        <span id="cam-status" class="absolute bottom-2 text-xs bg-black/70 px-3 py-1 rounded text-[#00ffcc] font-mono font-bold">バーコードリーダー停止中</span>
+        <video id="video" playsInline autoplay muted class="w-full h-full object-cover"></video>
+        <img id="photo-preview" class="w-full h-full object-cover hidden" alt="撮影プレビュー" />
+        <span id="cam-status" class="absolute bottom-2 text-xs bg-black/70 px-3 py-1 rounded text-[#00ffcc] font-mono font-bold">カメラ停止中</span>
+        <canvas id="canvas" class="hidden"></canvas>
       </div>
       <div class="flex gap-2">
-        <button type="button" id="btn-cam" onclick="toggleScanner()" class="w-full bg-[#093325] border-2 border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base cursor-pointer">📷 バーコードスキャン起動</button>
+        <button type="button" id="btn-cam" onclick="toggleCamera()" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base cursor-pointer">📷 カメラ起動</button>
+        <button type="button" id="btn-capture" onclick="captureAndScanBarcode()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影してバーコード読取</button>
       </div>
     </div>
 
@@ -238,8 +240,8 @@
     ];
     let currentStep = 0;
     let isStarted = false;
+    let mediaStream = null;
     let codeReader = null;
-    let isScanning = false;
 
     try {
       if (typeof ZXing !== 'undefined') {
@@ -273,8 +275,6 @@
       viewInput.classList.add('hidden');
       viewResult.classList.add('hidden');
 
-      stopScanner();
-
       if (!isStarted) {
         viewHome.classList.remove('hidden');
       } else if (currentStep !== 999) {
@@ -303,10 +303,16 @@
           addBtnWrap.classList.add('hidden');
         }
 
+        const video = document.getElementById('video');
+        if(video) video.classList.remove('hidden');
+        const preview = document.getElementById('photo-preview');
+        if(preview) preview.classList.add('hidden');
+        const captureBtn = document.getElementById('btn-capture');
+        if(captureBtn) captureBtn.classList.add('hidden');
         const camBtn = document.getElementById('btn-cam');
-        if(camBtn) camBtn.innerText = "📷 バーコードスキャン起動";
+        if(camBtn) camBtn.innerText = "📷 カメラ起動";
         const camStatus = document.getElementById('cam-status');
-        if(camStatus) camStatus.innerText = "バーコードリーダー停止中";
+        if(camStatus) camStatus.innerText = "カメラ停止中";
       } else {
         viewResult.classList.remove('hidden');
         document.getElementById('p-docNo').innerText = document.getElementById('docNo').value.toUpperCase();
@@ -341,7 +347,7 @@
       saveCurrentForm();
       currentStep = 0;
       isStarted = false;
-      stopScanner();
+      stopCamera();
       render();
     }
 
@@ -349,7 +355,7 @@
       saveCurrentForm();
       currentStep = 0;
       isStarted = true;
-      stopScanner();
+      stopCamera();
       render();
     }
 
@@ -360,7 +366,7 @@
       } else {
         currentStep = 999;
       }
-      stopScanner();
+      stopCamera();
       render();
     }
 
@@ -368,7 +374,7 @@
       saveCurrentForm();
       if (currentStep > 0) {
         currentStep--;
-        stopScanner();
+        stopCamera();
         render();
       } else {
         goToTop();
@@ -379,7 +385,7 @@
       saveCurrentForm();
       items.push({ title: '各種機器', model: '', serial: '', remarks: '' });
       currentStep = items.length - 1;
-      stopScanner();
+      stopCamera();
       render();
     }
 
@@ -389,72 +395,105 @@
       }, 100);
     }
 
-    // ZXingを使ったリアルタイム・バーコードスキャンの起動／停止切替
-    async function toggleScanner() {
+    async function toggleCamera() {
+      const video = document.getElementById('video');
+      const preview = document.getElementById('photo-preview');
       const status = document.getElementById('cam-status');
       const btn = document.getElementById('btn-cam');
+      const captureBtn = document.getElementById('btn-capture');
 
-      if (isScanning) {
-        stopScanner();
-        if(btn) btn.innerText = "📷 バーコードスキャン起動";
-        if(status) status.innerText = "バーコードリーダー停止中";
+      if (mediaStream) {
+        stopCamera();
+        if(status) status.innerText = "カメラ停止中";
+        if(video) video.classList.remove('hidden');
+        if(preview) preview.classList.add('hidden');
+        if(btn) btn.innerText = "📷 カメラ起動";
+        if(captureBtn) captureBtn.classList.add('hidden');
         return;
       }
 
-      if (!codeReader) {
-        try {
-          codeReader = new ZXing.BrowserBarcodeReader();
-        } catch(e) {
-          alert('バーコードリーダーを初期化できませんでした。');
-          return;
-        }
-      }
-
       try {
-        if(status) status.innerText = "🔍 カメラ起動中・読取待機中...";
-        isScanning = true;
-        if(btn) btn.innerText = "⏹ スキャン停止";
-
-        // カメラ映像をvideo要素に流し込みながらバーコードをデコード
-        codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
-          if (result) {
-            const scannedText = result.text.trim().toUpperCase();
-            if(status) status.innerText = `✨ 読取成功: ${scannedText}`;
-
-            // 空いているフィールド（優先的にシリアルNo、空いていなければ製品型式）へ自動セット
-            const serialInput = document.getElementById('f-serial');
-            const modelInput = document.getElementById('f-model');
-
-            if (serialInput && !serialInput.value) {
-              serialInput.value = scannedText;
-            } else if (modelInput && !modelInput.value) {
-              modelInput.value = scannedText;
-            } else {
-              serialInput.value = scannedText; // デフォルトでシリアルに上書き
-            }
-
-            saveCurrentForm();
-            
-            // 読み取ったら一度スキャンを停止してビープ音の代わりの通知
-            stopScanner();
-            if(btn) btn.innerText = "📷 バーコードスキャン起動";
-          }
+        if(status) status.innerText = "カメラ起動中...";
+        mediaStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: 'environment', 
+            width: { ideal: 1920 }, 
+            height: { ideal: 1080 } 
+          } 
         });
+        if(video) {
+          video.srcObject = mediaStream;
+          await video.play().catch(() => {});
+          video.classList.remove('hidden');
+        }
+        if(preview) preview.classList.add('hidden');
+        if(btn) btn.innerText = "⏹ 停止";
+        if(captureBtn) captureBtn.classList.remove('hidden');
+        if(status) status.innerText = "📷 準備完了（バーコードを合わせてボタンを押してください）";
       } catch (e) {
-        isScanning = false;
-        if(btn) btn.innerText = "📷 バーコードスキャン起動";
-        if(status) status.innerText = "カメラ起動エラー";
         alert('カメラを起動できませんでした。権限をご確認ください。');
+        if(status) status.innerText = "起動エラー";
       }
     }
 
-    function stopScanner() {
-      if (codeReader) {
-        try {
-          codeReader.reset();
-        } catch(e) {}
+    function stopCamera() {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(t => t.stop());
+        mediaStream = null;
       }
-      isScanning = false;
+    }
+
+    // 【重要】自動スキャンではなく、ユーザーがボタンを押した瞬間の静止画からバーコードを解析
+    async function captureAndScanBarcode() {
+      const video = document.getElementById('video');
+      const canvas = document.getElementById('canvas');
+      const preview = document.getElementById('photo-preview');
+      const status = document.getElementById('cam-status');
+      if (!video || !mediaStream) return;
+
+      const vWidth = video.videoWidth || 1280;
+      const vHeight = video.videoHeight || 720;
+      canvas.width = vWidth;
+      canvas.height = vHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, vWidth, vHeight);
+
+      if(preview) {
+        preview.src = canvas.toDataURL('image/jpeg', 0.95);
+        preview.classList.remove('hidden');
+      }
+      if(video) video.classList.add('hidden');
+      if(status) status.innerText = "🔍 バーコード解析中...";
+
+      try {
+        if (!codeReader) {
+          codeReader = new ZXing.BrowserBarcodeReader();
+        }
+        const result = await codeReader.decodeFromImage(undefined, canvas);
+        if (result && result.text) {
+          const scannedText = result.text.trim().toUpperCase();
+          if(status) status.innerText = `✨ 読取成功: ${scannedText}`;
+
+          // シリアル欄が空ならシリアル、埋まっていれば型式にセット
+          const serialInput = document.getElementById('f-serial');
+          if (serialInput && !serialInput.value) {
+            serialInput.value = scannedText;
+          } else {
+            const modelInput = document.getElementById('f-model');
+            if (modelInput) modelInput.value = scannedText;
+          }
+
+          saveCurrentForm();
+        } else {
+          if(status) status.innerText = "⚠️ バーコード未検出。再度撮影してください。";
+          if(video) video.classList.remove('hidden');
+          if(preview) preview.classList.add('hidden');
+        }
+      } catch (err) {
+        if(status) status.innerText = "⚠️ 読取失敗。枠内に合わせて再度撮影してください。";
+        if(video) video.classList.remove('hidden');
+        if(preview) preview.classList.add('hidden');
+      }
     }
 
     function loadCSVFile(e) {
