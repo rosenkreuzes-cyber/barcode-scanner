@@ -6,7 +6,6 @@
   <meta name="theme-color" content="#042219" />
   <title>シリアル記入シート - QuickScan DB</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -137,7 +136,7 @@
       </div>
       <div class="flex gap-2">
         <button type="button" id="btn-cam" onclick="toggleCamera()" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base cursor-pointer">📷 カメラ起動</button>
-        <button type="button" id="btn-capture" onclick="captureAndScanBarcode()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影してバーコード読取</button>
+        <button type="button" id="btn-capture" onclick="capturePhoto()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影する</button>
       </div>
     </div>
 
@@ -160,7 +159,7 @@
       </div>
     </div>
 
-    <!-- 機器追加ボタン（LIO-04や各種機器画面でも常時表示） -->
+    <!-- 機器追加ボタン（LIO-04含む3番目以降の画面で常時表示） -->
     <div id="add-btn-wrap" class="hidden">
       <button type="button" onclick="addDevice()" class="w-full border border-dashed border-[#00ffcc] text-[#00ffcc] py-3 rounded-xl text-base font-bold bg-[#00ffcc]/10 shadow-md cursor-pointer">＋ 機器追加 (各種機器画面へ)</button>
     </div>
@@ -240,13 +239,6 @@
     let currentStep = 0;
     let isStarted = false;
     let mediaStream = null;
-    let codeReader = null;
-
-    try {
-      if (typeof ZXing !== 'undefined') {
-        codeReader = new ZXing.BrowserBarcodeReader();
-      }
-    } catch(e) {}
 
     function saveCurrentForm() {
       if (isStarted && currentStep >= 0 && currentStep < items.length && currentStep !== 999) {
@@ -429,7 +421,7 @@
         if(preview) preview.classList.add('hidden');
         if(btn) btn.innerText = "⏹ 停止";
         if(captureBtn) captureBtn.classList.remove('hidden');
-        if(status) status.innerText = "📷 準備完了（バーコードを合わせてボタンを押してください）";
+        if(status) status.innerText = "📷 撮影準備完了";
       } catch (e) {
         alert('カメラを起動できませんでした。権限をご確認ください。');
         if(status) status.innerText = "起動エラー";
@@ -443,7 +435,7 @@
       }
     }
 
-    async function captureAndScanBarcode() {
+    function capturePhoto() {
       const video = document.getElementById('video');
       const canvas = document.getElementById('canvas');
       const preview = document.getElementById('photo-preview');
@@ -462,36 +454,7 @@
         preview.classList.remove('hidden');
       }
       if(video) video.classList.add('hidden');
-      if(status) status.innerText = "🔍 バーコード解析中...";
-
-      try {
-        if (!codeReader) {
-          codeReader = new ZXing.BrowserBarcodeReader();
-        }
-        const result = await codeReader.decodeFromImage(undefined, canvas);
-        if (result && result.text) {
-          const scannedText = result.text.trim().toUpperCase();
-          if(status) status.innerText = `✨ 読取成功: ${scannedText}`;
-
-          const serialInput = document.getElementById('f-serial');
-          if (serialInput && !serialInput.value) {
-            serialInput.value = scannedText;
-          } else {
-            const modelInput = document.getElementById('f-model');
-            if (modelInput) modelInput.value = scannedText;
-          }
-
-          saveCurrentForm();
-        } else {
-          if(status) status.innerText = "⚠️ バーコード未検出。再度撮影してください。";
-          if(video) video.classList.remove('hidden');
-          if(preview) preview.classList.add('hidden');
-        }
-      } catch (err) {
-        if(status) status.innerText = "⚠️ 読取失敗。枠内に合わせて再度撮影してください。";
-        if(video) video.classList.remove('hidden');
-        if(preview) preview.classList.add('hidden');
-      }
+      if(status) status.innerText = "📸 撮影完了";
     }
 
     function loadCSVFile(e) {
@@ -502,4 +465,110 @@
         try {
           const text = event.target.result;
           const lines = text.split(/\r\n|\n/).map(l => l.trim()).filter(l => l.length > 0);
-          const clean =
+          const clean = (val) => val ? val.replace(/^"|"$/g, '').trim().toUpperCase() : '';
+
+          lines.forEach(line => {
+            const cols = line.split(',').map(clean);
+            if (cols[0].includes('製造指図書')) {
+              document.getElementById('docNo').value = cols[1] || '';
+              document.getElementById('customer').value = cols[3] || '';
+            } else if (cols[0] === '機種名') {
+              document.getElementById('modelName').value = cols[1] || '';
+              document.getElementById('unitNo').value = cols[3] || '';
+            } else if (cols[0] === '記入日') {
+              document.getElementById('entryDate').value = cols[1] || document.getElementById('entryDate').value;
+              document.getElementById('orderQty').value = cols[3] || '';
+            } else if (cols[2] === 'エレキ担当') {
+              document.getElementById('elecStaff').value = cols[3] || '';
+            }
+          });
+
+          const headerIdx = lines.findIndex(l => l.includes('No,製品型式') || l.includes('NO,製品型式'));
+          if (headerIdx !== -1) {
+            const itemLines = lines.slice(headerIdx + 1);
+            let newItems = [
+              { title: '電源ユニット', model: '', serial: '', remarks: '' },
+              { title: 'CPU', model: '', serial: '', remarks: '' },
+              { title: 'ベースユニット', model: '', serial: '', remarks: '' },
+              { title: 'LIO-04', model: '', serial: '', remarks: '' }
+            ];
+
+            itemLines.forEach((line, idx) => {
+              if (idx >= 25) return;
+              const match = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
+              const cols = match ? match.map(clean) : [];
+              const no = parseInt(cols[0], 10);
+              if (isNaN(no)) return;
+
+              const rowData = {
+                model: cols[1] || '',
+                serial: cols[2] || '',
+                title: cols[3] || '',
+                remarks: cols[4] || ''
+              };
+
+              if (no >= 1 && no <= 4) {
+                newItems[no - 1].model = rowData.model;
+                newItems[no - 1].serial = rowData.serial;
+                newItems[no - 1].remarks = rowData.remarks;
+              } else if (no >= 5) {
+                if (rowData.model || rowData.serial || rowData.title || rowData.remarks) {
+                  newItems.push({
+                    title: rowData.title || '各種機器',
+                    model: rowData.model,
+                    serial: rowData.serial,
+                    remarks: rowData.remarks
+                  });
+                }
+              }
+            });
+            items = newItems;
+          }
+          alert('CSVファイルからデータを復元しました！');
+          document.getElementById('csvFileInput').value = '';
+        } catch (err) {
+          alert('CSVファイルの読み込みに失敗しました。');
+        }
+      };
+      reader.readAsText(file, 'UTF-8');
+    }
+
+    function saveCSV() {
+      saveCurrentForm();
+      const docNo = document.getElementById('docNo').value.toUpperCase();
+      const modelName = document.getElementById('modelName').value.toUpperCase();
+      const unitNo = document.getElementById('unitNo').value || '1';
+      const filename = `${yy}${mm}${dd}_${modelName || '機種'}_${docNo || '指図書'}_${unitNo}.csv`;
+
+      let csv = "\uFEFF";
+      csv += `製造指図書No,${docNo},客先名,${document.getElementById('customer').value.toUpperCase()}\n`;
+      csv += `機種名,${modelName},号機No,${unitNo}\n`;
+      csv += `記入日,${document.getElementById('entryDate').value},発注台数,${document.getElementById('orderQty').value}\n`;
+      csv += `,,エレキ担当,${document.getElementById('elecStaff').value.toUpperCase()}\n\n`;
+      csv += `No,製品型式,シリアルNo,機器名称,備考\n`;
+
+      for (let i = 0; i < 25; i++) {
+        const it = items[i] || { model: '', serial: '', title: '', remarks: '' };
+        const titleVal = it.title || (i < 4 ? items[i].title : '');
+        csv += `${i+1},"${it.model}","${it.serial}","${titleVal}","${it.remarks}"\n`;
+      }
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const entryDateEl = document.getElementById('entryDate');
+      if (entryDateEl) {
+        entryDateEl.value = `${now.getFullYear()}/${mm}/${dd}`;
+      }
+      render();
+    });
+  </script>
+</body>
+</html>
