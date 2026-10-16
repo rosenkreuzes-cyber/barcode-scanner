@@ -18,7 +18,7 @@
     }
     input { color-scheme: dark; text-transform: uppercase; }
 
-    /* A4縦1ページに確実に強制収容する印刷設定（2枚への分割を完全に防止） */
+    /* A4縦1ページに確実に収めるための印刷設定 */
     @media print {
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       html, body {
@@ -46,7 +46,7 @@
       th, td {
         border: 1px solid #000 !important;
         padding: 1px 2px !important;
-        font-size: 7px !important;
+        font-size: 8px !important;
         line-height: 1.0 !important;
         color: black !important;
         overflow: hidden;
@@ -56,7 +56,7 @@
       th { background-color: #f2f2f2 !important; }
       @page {
         size: A4 portrait;
-        margin: 2mm;
+        margin: 4mm;
       }
     }
   </style>
@@ -135,7 +135,7 @@
         <canvas id="canvas" class="hidden"></canvas>
       </div>
       <div class="flex gap-2">
-        <button type="button" onclick="toggleCamera()" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base cursor-pointer">📷 カメラ起動</button>
+        <button type="button" id="btn-cam" onclick="toggleCamera()" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base cursor-pointer">📷 カメラ起動</button>
         <button type="button" id="btn-capture" onclick="captureAndAnalyze()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影して自動入力</button>
       </div>
     </div>
