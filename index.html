@@ -18,7 +18,7 @@
     }
     input { color-scheme: dark; text-transform: uppercase; }
 
-    /* A4縦サイズ1ページに綺麗にフィットさせる印刷設定 */
+    /* A4縦サイズ1ページに綺麗に収め、文字の縦潰れを完全に解消する印刷設定 */
     @media print {
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       html, body {
@@ -26,6 +26,7 @@
         color: black !important;
         width: 100% !important;
         height: 100% !important;
+        overflow: hidden !important;
       }
       .no-print { display: none !important; }
       .print-area {
@@ -44,9 +45,9 @@
       }
       th, td {
         border: 1px solid #000 !important;
-        padding: 4px 6px !important;
-        font-size: 11px !important;
-        line-height: 1.25 !important;
+        padding: 3px 5px !important;
+        font-size: 10px !important;
+        line-height: 1.2 !important;
         color: black !important;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -55,7 +56,7 @@
       th { background-color: #f2f2f2 !important; }
       @page {
         size: A4 portrait;
-        margin: 10mm;
+        margin: 6mm;
       }
     }
   </style>
@@ -176,10 +177,10 @@
       </div>
     </div>
 
-    <!-- A4サイズに綺麗にフィットする印刷エリア -->
+    <!-- A4サイズ縦方向へのフィット感を改善した印刷エリア -->
     <div class="print-area bg-white text-black p-2 rounded-lg shadow-xl w-full">
-      <h1 class="text-center font-bold text-lg mb-2 border-b-2 border-black pb-1">シリアル記入シート</h1>
-      <table class="w-full text-xs border-collapse border border-black mb-2 table-fixed">
+      <h1 class="text-center font-bold text-base mb-1.5 border-b-2 border-black pb-1">シリアル記入シート</h1>
+      <table class="w-full text-xs border-collapse border border-black mb-1.5 table-fixed">
         <tbody>
           <tr>
             <th class="border border-black p-1 bg-gray-100 w-24">製造指図書No</th>
@@ -314,7 +315,7 @@
             const rowData = items[i] || { model: '', serial: '', title: '', remarks: '' };
             const displayTitle = rowData.title || (i < 4 ? items[i].title : '');
             tbody.innerHTML += `
-              <tr class="h-6">
+              <tr class="h-[18px]">
                 <td class="border border-black text-center font-bold bg-gray-50">${i + 1}</td>
                 <td class="border border-black px-1 font-bold truncate">${rowData.model}</td>
                 <td class="border border-black px-1 font-bold truncate">${rowData.serial}</td>
