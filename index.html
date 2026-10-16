@@ -129,35 +129,52 @@
 
     <h2 id="unit-title" class="text-2xl font-bold text-center text-[#F5D887]">電源ユニット 画面</h2>
 
-    <div class="w-full text-center mb-2">
-      <!-- 高さを抑えた横長コンパクトなカメラファインダー (h-32) -->
-      <div class="relative w-full h-32 bg-black overflow-hidden flex items-center justify-center mb-2 rounded-xl border border-[#E6DAA6]/30">
+    <!-- 超コンパクト（高さ1/3程度：h-20）な横長カメラファインダーエリア -->
+    <div id="camera-container" class="w-full hidden space-y-1 bg-[#093325] border border-[#00ffcc]/40 p-2 rounded-xl shadow-md">
+      <div class="flex justify-between items-center text-xs text-[#00ffcc] px-1 font-bold">
+        <span id="cam-status">📷 ターゲットにバーコードを合わせてください</span>
+        <button type="button" onclick="closeCamera()" class="text-red-300 hover:text-red-100 cursor-pointer">✕ 閉じる</button>
+      </div>
+      <div class="relative w-full h-20 bg-black overflow-hidden flex items-center justify-center rounded-lg">
         <video id="video" playsInline autoplay muted class="w-full h-full object-cover"></video>
         <img id="photo-preview" class="w-full h-full object-cover hidden" alt="撮影プレビュー" />
-        <span id="cam-status" class="absolute bottom-1 text-[11px] bg-black/70 px-2 py-0.5 rounded text-[#00ffcc] font-mono font-bold">カメラ停止中</span>
         <canvas id="canvas" class="hidden"></canvas>
       </div>
-      <div class="flex gap-2">
-        <button type="button" id="btn-cam" onclick="toggleCamera()" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-2.5 rounded-xl text-sm cursor-pointer">📷 カメラ起動</button>
-        <button type="button" id="btn-capture" onclick="captureAndScanBarcode()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-2.5 rounded-xl text-sm shadow-md cursor-pointer">📸 撮影してバーコード読取</button>
+      <div class="flex gap-2 pt-1">
+        <button type="button" onclick="captureAndScanBarcode()" class="flex-1 bg-[#F5D887] text-[#042219] font-bold py-1.5 rounded-lg text-sm shadow cursor-pointer">📸 撮影して読取</button>
+        <button type="button" onclick="retryScan()" class="bg-[#093325] border border-[#E6DAA6] text-[#E6DAA6] font-bold px-3 py-1.5 rounded-lg text-sm cursor-pointer">🔄 再読込</button>
+        <button type="button" onclick="confirmScan()" class="bg-[#00ffcc] text-[#042219] font-bold px-4 py-1.5 rounded-lg text-sm shadow cursor-pointer">✓ 決定</button>
       </div>
     </div>
 
+    <!-- 各入力フィールドの脇にカメラアイコンを配置 -->
     <div class="bg-[#093325] border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3 shadow-lg">
       <div id="title-field-wrap" class="hidden">
-        <label class="block text-sm mb-1 font-bold">機器名称</label>
+        <div class="flex justify-between items-center mb-1">
+          <label class="text-sm font-bold">機器名称</label>
+          <button type="button" onclick="openCameraFor('f-title')" class="bg-[#042219] border border-[#00ffcc] text-[#00ffcc] text-xs px-2.5 py-1 rounded-lg font-bold cursor-pointer hover:bg-[#00ffcc]/10">📷 カメラ読取</button>
+        </div>
         <input type="text" id="f-title" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase" placeholder="例: サーボパック" />
       </div>
       <div>
-        <label class="block text-sm mb-1 font-bold">製品型式</label>
+        <div class="flex justify-between items-center mb-1">
+          <label class="text-sm font-bold">製品型式</label>
+          <button type="button" onclick="openCameraFor('f-model')" class="bg-[#042219] border border-[#00ffcc] text-[#00ffcc] text-xs px-2.5 py-1 rounded-lg font-bold cursor-pointer hover:bg-[#00ffcc]/10">📷 カメラ読取</button>
+        </div>
         <input type="text" id="f-model" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase" placeholder="型式" />
       </div>
       <div>
-        <label class="block text-sm mb-1 font-bold">シリアルNo</label>
+        <div class="flex justify-between items-center mb-1">
+          <label class="text-sm font-bold">シリアルNo</label>
+          <button type="button" onclick="openCameraFor('f-serial')" class="bg-[#042219] border border-[#00ffcc] text-[#00ffcc] text-xs px-2.5 py-1 rounded-lg font-bold cursor-pointer hover:bg-[#00ffcc]/10">📷 カメラ読取</button>
+        </div>
         <input type="text" id="f-serial" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase" placeholder="シリアル" />
       </div>
       <div>
-        <label class="block text-sm mb-1 font-bold">備考 (バージョン情報等)</label>
+        <div class="flex justify-between items-center mb-1">
+          <label class="text-sm font-bold">備考 (バージョン情報等)</label>
+          <button type="button" onclick="openCameraFor('f-remarks')" class="bg-[#042219] border border-[#00ffcc] text-[#00ffcc] text-xs px-2.5 py-1 rounded-lg font-bold cursor-pointer hover:bg-[#00ffcc]/10">📷 カメラ読取</button>
+        </div>
         <input type="text" id="f-remarks" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase" placeholder="例: A03" />
       </div>
     </div>
@@ -243,6 +260,8 @@
     let isStarted = false;
     let mediaStream = null;
     let codeReader = null;
+    let activeTargetFieldId = null; // どの入力欄に対してスキャンしているかを保持
+    let scannedTemporaryValue = ""; // 決定されるまでの仮の値
 
     try {
       if (typeof ZXing !== 'undefined') {
@@ -276,6 +295,8 @@
       viewInput.classList.add('hidden');
       viewResult.classList.add('hidden');
 
+      closeCamera();
+
       if (!isStarted) {
         viewHome.classList.remove('hidden');
       } else if (currentStep !== 999) {
@@ -303,17 +324,6 @@
         } else {
           addBtnWrap.classList.add('hidden');
         }
-
-        const video = document.getElementById('video');
-        if(video) video.classList.remove('hidden');
-        const preview = document.getElementById('photo-preview');
-        if(preview) preview.classList.add('hidden');
-        const captureBtn = document.getElementById('btn-capture');
-        if(captureBtn) captureBtn.classList.add('hidden');
-        const camBtn = document.getElementById('btn-cam');
-        if(camBtn) camBtn.innerText = "📷 カメラ起動";
-        const camStatus = document.getElementById('cam-status');
-        if(camStatus) camStatus.innerText = "カメラ停止中";
       } else {
         viewResult.classList.remove('hidden');
         document.getElementById('p-docNo').innerText = document.getElementById('docNo').value.toUpperCase();
@@ -348,7 +358,7 @@
       saveCurrentForm();
       currentStep = 0;
       isStarted = false;
-      stopCamera();
+      closeCamera();
       render();
     }
 
@@ -356,7 +366,7 @@
       saveCurrentForm();
       currentStep = 0;
       isStarted = true;
-      stopCamera();
+      closeCamera();
       render();
     }
 
@@ -367,7 +377,7 @@
       } else {
         currentStep = 999;
       }
-      stopCamera();
+      closeCamera();
       render();
     }
 
@@ -375,7 +385,7 @@
       saveCurrentForm();
       if (currentStep > 0) {
         currentStep--;
-        stopCamera();
+        closeCamera();
         render();
       } else {
         goToTop();
@@ -386,7 +396,7 @@
       saveCurrentForm();
       items.push({ title: '各種機器', model: '', serial: '', remarks: '' });
       currentStep = items.length - 1;
-      stopCamera();
+      closeCamera();
       render();
     }
 
@@ -396,54 +406,48 @@
       }, 100);
     }
 
-    async function toggleCamera() {
+    // 指定されたフィールド用のカメラファインダーを開く
+    async function openCameraFor(fieldId) {
+      activeTargetFieldId = fieldId;
+      scannedTemporaryValue = "";
+      const container = document.getElementById('camera-container');
       const video = document.getElementById('video');
       const preview = document.getElementById('photo-preview');
       const status = document.getElementById('cam-status');
-      const btn = document.getElementById('btn-cam');
-      const captureBtn = document.getElementById('btn-capture');
 
-      if (mediaStream) {
-        stopCamera();
-        if(status) status.innerText = "カメラ停止中";
-        if(video) video.classList.remove('hidden');
-        if(preview) preview.classList.add('hidden');
-        if(btn) btn.innerText = "📷 カメラ起動";
-        if(captureBtn) captureBtn.classList.add('hidden');
-        return;
-      }
+      container.classList.remove('hidden');
+      preview.classList.add('hidden');
+      video.classList.remove('hidden');
 
       try {
-        if(status) status.innerText = "カメラ起動中...";
+        status.innerText = "📷 カメラ起動中...";
         mediaStream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
             facingMode: 'environment', 
-            width: { ideal: 1920 }, 
-            height: { ideal: 1080 } 
+            width: { ideal: 1280 }, 
+            height: { ideal: 720 } 
           } 
         });
-        if(video) {
-          video.srcObject = mediaStream;
-          await video.play().catch(() => {});
-          video.classList.remove('hidden');
-        }
-        if(preview) preview.classList.add('hidden');
-        if(btn) btn.innerText = "⏹ 停止";
-        if(captureBtn) captureBtn.classList.remove('hidden');
-        if(status) status.innerText = "📷 準備完了（バーコードを合わせてボタンを押してください）";
+        video.srcObject = mediaStream;
+        await video.play().catch(() => {});
+        status.innerText = "🎯 バーコードを合わせて「撮影して読取」を押してください";
       } catch (e) {
         alert('カメラを起動できませんでした。権限をご確認ください。');
-        if(status) status.innerText = "起動エラー";
+        status.innerText = "起動エラー";
       }
     }
 
-    function stopCamera() {
+    function closeCamera() {
       if (mediaStream) {
         mediaStream.getTracks().forEach(t => t.stop());
         mediaStream = null;
       }
+      const container = document.getElementById('camera-container');
+      if (container) container.classList.add('hidden');
+      activeTargetFieldId = null;
     }
 
+    // 撮影してバーコード解析（仮読み込み）
     async function captureAndScanBarcode() {
       const video = document.getElementById('video');
       const canvas = document.getElementById('canvas');
@@ -458,12 +462,10 @@
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, vWidth, vHeight);
 
-      if(preview) {
-        preview.src = canvas.toDataURL('image/jpeg', 0.95);
-        preview.classList.remove('hidden');
-      }
-      if(video) video.classList.add('hidden');
-      if(status) status.innerText = "🔍 バーコード解析中...";
+      preview.src = canvas.toDataURL('image/jpeg', 0.95);
+      preview.classList.remove('hidden');
+      video.classList.add('hidden');
+      status.innerText = "🔍 解析中...";
 
       try {
         if (!codeReader) {
@@ -471,28 +473,39 @@
         }
         const result = await codeReader.decodeFromImage(undefined, canvas);
         if (result && result.text) {
-          const scannedText = result.text.trim().toUpperCase();
-          if(status) status.innerText = `✨ 読取成功: ${scannedText}`;
-
-          const serialInput = document.getElementById('f-serial');
-          if (serialInput && !serialInput.value) {
-            serialInput.value = scannedText;
-          } else {
-            const modelInput = document.getElementById('f-model');
-            if (modelInput) modelInput.value = scannedText;
+          scannedTemporaryValue = result.text.trim().toUpperCase();
+          status.innerText = `✨ 読取成功: ${scannedTemporaryValue} (「決定」を押してください)`;
+          
+          // 該当フィールドに仮反映
+          if (activeTargetFieldId) {
+            document.getElementById(activeTargetFieldId).value = scannedTemporaryValue;
           }
-
-          saveCurrentForm();
         } else {
-          if(status) status.innerText = "⚠️ バーコード未検出。再度撮影してください。";
-          if(video) video.classList.remove('hidden');
-          if(preview) preview.classList.add('hidden');
+          status.innerText = "⚠️ 未検出。「再読込」で撮り直してください。";
         }
       } catch (err) {
-        if(status) status.innerText = "⚠️ 読取失敗。枠内に合わせて再度撮影してください。";
-        if(video) video.classList.remove('hidden');
-        if(preview) preview.classList.add('hidden');
+        status.innerText = "⚠️ 読取失敗。「再読込」で撮り直してください。";
       }
+    }
+
+    // 再読み込み（再撮影）ボタン
+    function retryScan() {
+      const video = document.getElementById('video');
+      const preview = document.getElementById('photo-preview');
+      const status = document.getElementById('cam-status');
+      
+      preview.classList.add('hidden');
+      video.classList.remove('hidden');
+      status.innerText = "🎯 再度バーコードを合わせてください";
+    }
+
+    // 決定ボタン
+    function confirmScan() {
+      if (activeTargetFieldId && scannedTemporaryValue) {
+        document.getElementById(activeTargetFieldId).value = scannedTemporaryValue;
+        saveCurrentForm();
+      }
+      closeCamera();
     }
 
     function loadCSVFile(e) {
