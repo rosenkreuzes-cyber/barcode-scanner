@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB (撮影読取仕様)</title>
+  <title>シリアル記入シート - QuickScan DB</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- ZXingライブラリ（静止画からのバーコードデコード用） -->
   <script src="https://unpkg.com/@zxing/library@latest"></script>
@@ -130,15 +130,16 @@
     <h2 id="unit-title" class="text-2xl font-bold text-center text-[#F5D887]">電源ユニット 画面</h2>
 
     <div class="w-full text-center mb-2">
-      <div class="relative w-full h-56 bg-black overflow-hidden flex items-center justify-center mb-2 rounded-xl">
+      <!-- 高さを抑えた横長コンパクトなカメラファインダー (h-32) -->
+      <div class="relative w-full h-32 bg-black overflow-hidden flex items-center justify-center mb-2 rounded-xl border border-[#E6DAA6]/30">
         <video id="video" playsInline autoplay muted class="w-full h-full object-cover"></video>
         <img id="photo-preview" class="w-full h-full object-cover hidden" alt="撮影プレビュー" />
-        <span id="cam-status" class="absolute bottom-2 text-xs bg-black/70 px-3 py-1 rounded text-[#00ffcc] font-mono font-bold">カメラ停止中</span>
+        <span id="cam-status" class="absolute bottom-1 text-[11px] bg-black/70 px-2 py-0.5 rounded text-[#00ffcc] font-mono font-bold">カメラ停止中</span>
         <canvas id="canvas" class="hidden"></canvas>
       </div>
       <div class="flex gap-2">
-        <button type="button" id="btn-cam" onclick="toggleCamera()" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base cursor-pointer">📷 カメラ起動</button>
-        <button type="button" id="btn-capture" onclick="captureAndScanBarcode()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影してバーコード読取</button>
+        <button type="button" id="btn-cam" onclick="toggleCamera()" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-2.5 rounded-xl text-sm cursor-pointer">📷 カメラ起動</button>
+        <button type="button" id="btn-capture" onclick="captureAndScanBarcode()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-2.5 rounded-xl text-sm shadow-md cursor-pointer">📸 撮影してバーコード読取</button>
       </div>
     </div>
 
@@ -443,7 +444,6 @@
       }
     }
 
-    // 【重要】自動スキャンではなく、ユーザーがボタンを押した瞬間の静止画からバーコードを解析
     async function captureAndScanBarcode() {
       const video = document.getElementById('video');
       const canvas = document.getElementById('canvas');
@@ -474,7 +474,6 @@
           const scannedText = result.text.trim().toUpperCase();
           if(status) status.innerText = `✨ 読取成功: ${scannedText}`;
 
-          // シリアル欄が空ならシリアル、埋まっていれば型式にセット
           const serialInput = document.getElementById('f-serial');
           if (serialInput && !serialInput.value) {
             serialInput.value = scannedText;
