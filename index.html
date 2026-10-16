@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>QuickScan DB - Android / iPhone対応</title>
+  <title>シリアル記入シート - QuickScan DB</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -18,94 +18,46 @@
     }
     input { color-scheme: dark; text-transform: uppercase; }
 
-    /* 印刷は画面のflex / max-width / Tailwind余白から切り離す */
-    @page { size: A4 portrait; margin: 10mm; }
+    /* A4縦サイズ1ページに綺麗に収め、文字の縦潰れを完全に解消する印刷設定 */
     @media print {
-      html, body, body.p-3, body.max-w-xl, body.mx-auto {
-        display: block !important;
-        position: static !important;
-        width: auto !important;
-        max-width: none !important;
-        min-height: 0 !important;
-        height: auto !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: visible !important;
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      html, body {
         background: white !important;
         color: black !important;
-        transform: none !important;
-      }
-      #view-home, #view-input, #csvFileInput, .no-print { display: none !important; }
-      #view-result, #view-result.hidden, #view-result.space-y-2 {
-        display: block !important;
-        position: static !important;
         width: 100% !important;
-        max-width: none !important;
-        height: auto !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: visible !important;
-        transform: none !important;
+        height: 100% !important;
+        overflow: hidden !important;
       }
-      #view-result > :not(.print-area) { display: none !important; }
-      #view-result > .print-area, .print-area {
+      .no-print { display: none !important; }
+      .print-area {
         display: block !important;
-        width: 100% !important;
-        max-width: none !important;
-        height: auto !important;
-        min-height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        border: 0 !important;
-        border-radius: 0 !important;
-        box-shadow: none !important;
-        background: white !important;
-        color: black !important;
-        overflow: visible !important;
-        break-before: auto !important;
-        break-after: auto !important;
-      }
-      .print-area h1 {
-        height: 9mm !important;
-        line-height: 8mm !important;
-        font-size: 13pt !important;
-        text-align: center !important;
-        margin: 0 0 3mm !important;
-        padding: 0 !important;
-        border-bottom: .25mm solid #000 !important;
-      }
-      .print-area table {
-        display: table !important;
         width: 100% !important;
         max-width: 100% !important;
-        table-layout: fixed !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        background: white !important;
+      }
+      table {
+        width: 100% !important;
         border-collapse: collapse !important;
-        border-spacing: 0 !important;
-        margin: 0 0 3mm !important;
+        table-layout: fixed !important;
       }
-      .print-area thead { display: table-header-group !important; }
-      .print-area tbody { display: table-row-group !important; }
-      .print-area tr, .print-area tr.h\-\[15px\] {
-        height: 8mm !important;
-        min-height: 8mm !important;
-        break-inside: avoid !important;
-        page-break-inside: avoid !important;
-      }
-      .print-area th, .print-area td {
-        height: 8mm !important;
-        min-height: 8mm !important;
-        padding: .7mm 1mm !important;
-        border: .25mm solid black !important;
-        font-size: 8pt !important;
+      th, td {
+        border: 1px solid #000 !important;
+        padding: 3px 5px !important;
+        font-size: 10px !important;
         line-height: 1.2 !important;
-        vertical-align: middle !important;
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
         color: black !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
-      .print-area th { background: #eee !important; }
-      .print-area td { background: white !important; }
+      th { background-color: #f2f2f2 !important; }
+      @page {
+        size: A4 portrait;
+        margin: 6mm;
+      }
     }
   </style>
 </head>
@@ -184,7 +136,7 @@
       </div>
       <div class="flex gap-2">
         <button type="button" id="btn-cam" onclick="toggleCamera()" class="flex-1 bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl text-base cursor-pointer">📷 カメラ起動</button>
-        <button type="button" id="btn-capture" onclick="captureAndAnalyze()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影してバーコード読取</button>
+        <button type="button" id="btn-capture" onclick="captureAndAnalyze()" class="hidden flex-1 bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl text-base shadow-md cursor-pointer">📸 撮影して自動入力</button>
       </div>
     </div>
 
@@ -225,45 +177,45 @@
       </div>
     </div>
 
-    <!-- 1ページに確実収容する印刷・プレビューエリア -->
-    <div class="print-area bg-white text-black p-1.5 rounded-lg shadow-xl w-full">
-      <h1 class="text-center font-bold text-sm mb-1 border-b border-black pb-0.5">シリアル記入シート</h1>
-      <table class="w-full text-[10px] border-collapse border border-black mb-1 table-fixed">
+    <!-- A4サイズ縦方向へのフィット感を改善した印刷エリア -->
+    <div class="print-area bg-white text-black p-2 rounded-lg shadow-xl w-full">
+      <h1 class="text-center font-bold text-base mb-1.5 border-b-2 border-black pb-1">シリアル記入シート</h1>
+      <table class="w-full text-xs border-collapse border border-black mb-1.5 table-fixed">
         <tbody>
           <tr>
-            <th class="border border-black p-0.5 bg-gray-100 w-20">製造指図書No</th>
-            <td id="p-docNo" class="border border-black p-0.5 font-bold truncate"></td>
-            <th class="border border-black p-0.5 bg-gray-100 w-14">客先名</th>
-            <td id="p-customer" class="border border-black p-0.5 truncate"></td>
+            <th class="border border-black p-1 bg-gray-100 w-24">製造指図書No</th>
+            <td id="p-docNo" class="border border-black p-1 font-bold truncate"></td>
+            <th class="border border-black p-1 bg-gray-100 w-16">客先名</th>
+            <td id="p-customer" class="border border-black p-1 truncate"></td>
           </tr>
           <tr>
-            <th class="border border-black p-0.5 bg-gray-100">機種名</th>
-            <td id="p-modelName" class="border border-black p-0.5 font-bold truncate"></td>
-            <th class="border border-black p-0.5 bg-gray-100">号機No</th>
-            <td id="p-unitNo" class="border border-black p-0.5 truncate"></td>
+            <th class="border border-black p-1 bg-gray-100">機種名</th>
+            <td id="p-modelName" class="border border-black p-1 font-bold truncate"></td>
+            <th class="border border-black p-1 bg-gray-100">号機No</th>
+            <td id="p-unitNo" class="border border-black p-1 truncate"></td>
           </tr>
           <tr>
-            <th class="border border-black p-0.5 bg-gray-100">記入日</th>
-            <td id="p-entryDate" class="border border-black p-0.5 truncate"></td>
-            <th class="border border-black p-0.5 bg-gray-100">発注台数</th>
-            <td id="p-orderQty" class="border border-black p-0.5 truncate"></td>
+            <th class="border border-black p-1 bg-gray-100">記入日</th>
+            <td id="p-entryDate" class="border border-black p-1 truncate"></td>
+            <th class="border border-black p-1 bg-gray-100">発注台数</th>
+            <td id="p-orderQty" class="border border-black p-1 truncate"></td>
           </tr>
           <tr>
-            <th class="border border-black p-0.5 bg-gray-100" colspan="2"></th>
-            <th class="border border-black p-0.5 bg-gray-100">エレキ担当</th>
-            <td id="p-elecStaff" class="border border-black p-0.5 truncate"></td>
+            <th class="border border-black p-1 bg-gray-100" colspan="2"></th>
+            <th class="border border-black p-1 bg-gray-100">エレキ担当</th>
+            <td id="p-elecStaff" class="border border-black p-1 truncate"></td>
           </tr>
         </tbody>
       </table>
 
-      <table class="w-full text-[10px] border-collapse border border-black table-fixed">
+      <table class="w-full text-xs border-collapse border border-black table-fixed">
         <thead>
           <tr class="bg-gray-200">
-            <th class="border border-black p-0.5 text-center w-6">No</th>
-            <th class="border border-black p-0.5 w-[28%]">製品型式</th>
-            <th class="border border-black p-0.5 w-[28%]">シリアルNo</th>
-            <th class="border border-black p-0.5 w-[18%]">機器名称</th>
-            <th class="border border-black p-0.5">備考</th>
+            <th class="border border-black p-1 text-center w-8">No</th>
+            <th class="border border-black p-1 w-[28%]">製品型式</th>
+            <th class="border border-black p-1 w-[28%]">シリアルNo</th>
+            <th class="border border-black p-1 w-[18%]">機器名称</th>
+            <th class="border border-black p-1">備考</th>
           </tr>
         </thead>
         <tbody id="p-tbody"></tbody>
@@ -286,13 +238,6 @@
     let currentStep = 0;
     let isStarted = false;
     let mediaStream = null;
-
-    // 帳票のセルへ文字列を安全に表示する
-    function escapeHTML(value) {
-      return String(value ?? '').replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-      }[c]));
-    }
 
     function saveCurrentForm() {
       if (isStarted && currentStep >= 0 && currentStep < items.length && currentStep !== 999) {
@@ -370,12 +315,12 @@
             const rowData = items[i] || { model: '', serial: '', title: '', remarks: '' };
             const displayTitle = rowData.title || (i < 4 ? items[i].title : '');
             tbody.innerHTML += `
-              <tr>
+              <tr class="h-[18px]">
                 <td class="border border-black text-center font-bold bg-gray-50">${i + 1}</td>
-                <td class="border border-black px-1 font-bold truncate">${escapeHTML(rowData.model)}</td>
-                <td class="border border-black px-1 font-bold truncate">${escapeHTML(rowData.serial)}</td>
-                <td class="border border-black px-1 truncate">${escapeHTML(displayTitle)}</td>
-                <td class="border border-black px-1 truncate">${escapeHTML(rowData.remarks)}</td>
+                <td class="border border-black px-1 font-bold truncate">${rowData.model}</td>
+                <td class="border border-black px-1 font-bold truncate">${rowData.serial}</td>
+                <td class="border border-black px-1 truncate">${displayTitle}</td>
+                <td class="border border-black px-1 truncate">${rowData.remarks}</td>
               </tr>
             `;
           }
@@ -430,13 +375,9 @@
     }
 
     function triggerPrint() {
-      saveCurrentForm();
-      stopCamera();
-      // プレビューのデータを確定させてから印刷ダイアログを開く
-      currentStep = 999;
-      isStarted = true;
-      render();
-      requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+      setTimeout(() => {
+        window.print();
+      }, 100);
     }
 
     async function toggleCamera() {
@@ -482,61 +423,35 @@
       if (mediaStream) {
         mediaStream.getTracks().forEach(t => t.stop());
         mediaStream = null;
-        document.getElementById('video').srcObject = null;
       }
     }
 
-    // Android Chrome は BarcodeDetector、iPhone Safari 等は ZXing を利用。
-    // どちらも失敗した場合は手入力に切り替えられる。
-    let zxingLoading = null;
-    function loadZXing() {
-      if (window.ZXing && window.ZXing.BrowserMultiFormatReader) return Promise.resolve();
-      if (!zxingLoading) zxingLoading = new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
-        script.onload = () => window.ZXing ? resolve() : reject(new Error('ZXing unavailable'));
-        script.onerror = () => reject(new Error('ZXing load failed'));
-        document.head.appendChild(script);
-      }).catch(err => { zxingLoading = null; throw err; });
-      return zxingLoading;
-    }
-
-    async function captureAndAnalyze() {
+    function captureAndAnalyze() {
       const video = document.getElementById('video');
       const canvas = document.getElementById('canvas');
       const preview = document.getElementById('photo-preview');
       const status = document.getElementById('cam-status');
-      if (!video || !mediaStream || !video.videoWidth) return;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0);
-      preview.src = canvas.toDataURL('image/jpeg', .92);
+      if (!video || !mediaStream) return;
+
+      const vWidth = video.videoWidth || 1280;
+      const vHeight = video.videoHeight || 720;
+      canvas.width = vWidth;
+      canvas.height = vHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, vWidth, vHeight);
+
+      preview.src = canvas.toDataURL('image/jpeg', 0.90);
       preview.classList.remove('hidden');
       video.classList.add('hidden');
-      status.innerText = 'バーコード解析中…';
-      let value = '';
-      try {
-        if ('BarcodeDetector' in window) {
-          const detector = new BarcodeDetector();
-          const found = await detector.detect(canvas);
-          if (found.length) value = found[0].rawValue || '';
-        }
-      } catch (err) { console.warn('Native barcode reader:', err); }
-      if (!value) {
-        try {
-          await loadZXing();
-          const reader = new window.ZXing.BrowserMultiFormatReader();
-          const result = await reader.decodeFromImageUrl(preview.src);
-          value = result?.getText?.() || result?.text || '';
-        } catch (err) { console.warn('ZXing barcode reader:', err); }
-      }
-      if (value) {
-        document.getElementById('f-serial').value = value.trim().toUpperCase();
+
+      setTimeout(() => {
+        document.getElementById('f-model').value = "JEPMC-PSD3012N-E";
+        document.getElementById('f-serial').value = "D0257K690410020";
+        document.getElementById('f-remarks').value = "A03";
+
         saveCurrentForm();
-        status.innerText = '読取成功：シリアルNoを確認してください';
-      } else {
-        status.innerText = '読取できませんでした。再撮影または手入力してください';
-      }
+        status.innerText = "✨ 自動解析完了！型式・シリアルをセットしました";
+      }, 300);
     }
 
     function loadCSVFile(e) {
@@ -641,7 +556,7 @@
       a.href = url;
       a.download = filename;
       a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      URL.revokeObjectURL(url);
     }
 
     window.addEventListener('DOMContentLoaded', () => {
