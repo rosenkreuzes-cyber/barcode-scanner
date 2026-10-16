@@ -18,30 +18,94 @@
     }
     input { color-scheme: dark; text-transform: uppercase; }
 
-    /* スマートフォンの印刷画面でもA4縦1枚に収める */
+    /* 印刷は画面のflex / max-width / Tailwind余白から切り離す */
     @page { size: A4 portrait; margin: 10mm; }
     @media print {
-      html, body { display: block !important; width: 100% !important; height: auto !important;
-        min-height: 0 !important; max-width: none !important; margin: 0 !important;
-        padding: 0 !important; overflow: visible !important; background: #fff !important;
-        color: #000 !important; }
-      #view-home, #view-input, .no-print, #csvFileInput { display: none !important; }
-      #view-result { display: block !important; margin: 0 !important; padding: 0 !important;
-        width: 100% !important; }
-      .print-area { display: block !important; margin: 0 !important; padding: 0 !important;
-        width: 100% !important; max-width: none !important; background: white !important;
-        box-shadow: none !important; border-radius: 0 !important; }
-      .print-area h1 { font-size: 12pt !important; line-height: 7mm !important;
-        margin: 0 0 2mm !important; padding: 0 !important; }
-      .print-area table { width: 100% !important; border-collapse: collapse !important;
-        table-layout: fixed !important; margin: 0 0 2mm !important; }
-      .print-area tr { break-inside: avoid !important; page-break-inside: avoid !important; }
-      .print-area th, .print-area td { border: .25mm solid #000 !important;
-        height: 7mm !important; max-height: 7mm !important; padding: .5mm 1mm !important;
-        font-size: 8pt !important; line-height: 1.1 !important; white-space: nowrap !important;
-        overflow: hidden !important; text-overflow: ellipsis !important; color: black !important; }
-      .print-area th { background: #eee !important; }
+      html, body, body.p-3, body.max-w-xl, body.mx-auto {
+        display: block !important;
+        position: static !important;
+        width: auto !important;
+        max-width: none !important;
+        min-height: 0 !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        background: white !important;
+        color: black !important;
+        transform: none !important;
+      }
+      #view-home, #view-input, #csvFileInput, .no-print { display: none !important; }
+      #view-result, #view-result.hidden, #view-result.space-y-2 {
+        display: block !important;
+        position: static !important;
+        width: 100% !important;
+        max-width: none !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        transform: none !important;
+      }
+      #view-result > :not(.print-area) { display: none !important; }
+      #view-result > .print-area, .print-area {
+        display: block !important;
+        width: 100% !important;
+        max-width: none !important;
+        height: auto !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        background: white !important;
+        color: black !important;
+        overflow: visible !important;
+        break-before: auto !important;
+        break-after: auto !important;
+      }
+      .print-area h1 {
+        height: 9mm !important;
+        line-height: 8mm !important;
+        font-size: 13pt !important;
+        text-align: center !important;
+        margin: 0 0 3mm !important;
+        padding: 0 !important;
+        border-bottom: .25mm solid #000 !important;
+      }
+      .print-area table {
+        display: table !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        table-layout: fixed !important;
+        border-collapse: collapse !important;
+        border-spacing: 0 !important;
+        margin: 0 0 3mm !important;
+      }
       .print-area thead { display: table-header-group !important; }
+      .print-area tbody { display: table-row-group !important; }
+      .print-area tr, .print-area tr.h\-\[15px\] {
+        height: 8mm !important;
+        min-height: 8mm !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+      .print-area th, .print-area td {
+        height: 8mm !important;
+        min-height: 8mm !important;
+        padding: .7mm 1mm !important;
+        border: .25mm solid black !important;
+        font-size: 8pt !important;
+        line-height: 1.2 !important;
+        vertical-align: middle !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        color: black !important;
+      }
+      .print-area th { background: #eee !important; }
+      .print-area td { background: white !important; }
     }
   </style>
 </head>
@@ -223,6 +287,13 @@
     let isStarted = false;
     let mediaStream = null;
 
+    // 帳票のセルへ文字列を安全に表示する
+    function escapeHTML(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
     function saveCurrentForm() {
       if (isStarted && currentStep >= 0 && currentStep < items.length && currentStep !== 999) {
         const m = document.getElementById('f-model');
@@ -299,7 +370,7 @@
             const rowData = items[i] || { model: '', serial: '', title: '', remarks: '' };
             const displayTitle = rowData.title || (i < 4 ? items[i].title : '');
             tbody.innerHTML += `
-              <tr class="h-[15px]">
+              <tr>
                 <td class="border border-black text-center font-bold bg-gray-50">${i + 1}</td>
                 <td class="border border-black px-1 font-bold truncate">${escapeHTML(rowData.model)}</td>
                 <td class="border border-black px-1 font-bold truncate">${escapeHTML(rowData.serial)}</td>
@@ -359,7 +430,13 @@
     }
 
     function triggerPrint() {
-      window.print();
+      saveCurrentForm();
+      stopCamera();
+      // プレビューのデータを確定させてから印刷ダイアログを開く
+      currentStep = 999;
+      isStarted = true;
+      render();
+      requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
     }
 
     async function toggleCamera() {
