@@ -18,7 +18,7 @@
     }
     input { color-scheme: dark; text-transform: uppercase; }
 
-    /* A4縦1ページに確実に収めるための印刷設定 */
+    /* A4縦1ページに確実に強制収容する印刷設定（2枚への分割を完全に防止） */
     @media print {
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       html, body {
@@ -26,6 +26,7 @@
         color: black !important;
         width: 100% !important;
         height: 100% !important;
+        overflow: hidden !important;
       }
       .no-print { display: none !important; }
       .print-area {
@@ -33,7 +34,7 @@
         width: 100% !important;
         max-width: 100% !important;
         margin: 0 !important;
-        padding: 1mm !important;
+        padding: 0 !important;
         box-shadow: none !important;
         background: white !important;
       }
@@ -44,8 +45,8 @@
       }
       th, td {
         border: 1px solid #000 !important;
-        padding: 1.5px 2px !important;
-        font-size: 7.5px !important;
+        padding: 1px 2px !important;
+        font-size: 7px !important;
         line-height: 1.0 !important;
         color: black !important;
         overflow: hidden;
@@ -55,7 +56,7 @@
       th { background-color: #f2f2f2 !important; }
       @page {
         size: A4 portrait;
-        margin: 3mm;
+        margin: 2mm;
       }
     }
   </style>
@@ -176,10 +177,10 @@
       </div>
     </div>
 
-    <!-- 1ページ完全固定・はみ出し防止エリア -->
-    <div class="print-area bg-white text-black p-2 rounded-lg shadow-xl w-full">
-      <h1 class="text-center font-bold text-base mb-1 border-b-2 border-black pb-0.5">シリアル記入シート</h1>
-      <table class="w-full text-[10px] border-collapse border border-black mb-1 table-fixed">
+    <!-- 1ページ完全強制収容エリア -->
+    <div class="print-area bg-white text-black p-1 rounded-lg shadow-xl w-full">
+      <h1 class="text-center font-bold text-sm mb-0.5 border-b border-black pb-0.5">シリアル記入シート</h1>
+      <table class="w-full text-[9px] border-collapse border border-black mb-0.5 table-fixed">
         <tbody>
           <tr>
             <th class="border border-black p-0.5 bg-gray-100 w-20">製造指図書No</th>
@@ -207,10 +208,10 @@
         </tbody>
       </table>
 
-      <table class="w-full text-[10px] border-collapse border border-black table-fixed">
+      <table class="w-full text-[9px] border-collapse border border-black table-fixed">
         <thead>
           <tr class="bg-gray-200">
-            <th class="border border-black p-0.5 text-center w-7">No</th>
+            <th class="border border-black p-0.5 text-center w-6">No</th>
             <th class="border border-black p-0.5 w-[28%]">製品型式</th>
             <th class="border border-black p-0.5 w-[28%]">シリアルNo</th>
             <th class="border border-black p-0.5 w-[18%]">機器名称</th>
@@ -314,7 +315,7 @@
             const rowData = items[i] || { model: '', serial: '', title: '', remarks: '' };
             const displayTitle = rowData.title || (i < 4 ? items[i].title : '');
             tbody.innerHTML += `
-              <tr class="h-4">
+              <tr class="h-3.5">
                 <td class="border border-black text-center font-bold bg-gray-50">${i + 1}</td>
                 <td class="border border-black px-1 font-bold truncate">${rowData.model}</td>
                 <td class="border border-black px-1 font-bold truncate">${rowData.serial}</td>
