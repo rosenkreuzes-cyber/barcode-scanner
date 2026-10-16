@@ -160,7 +160,7 @@
       </div>
     </div>
 
-    <!-- 機器追加ボタン（LIO-04含む3番目以降の画面で常時表示） -->
+    <!-- 機器追加ボタン（LIO-04や各種機器画面でも常時表示） -->
     <div id="add-btn-wrap" class="hidden">
       <button type="button" onclick="addDevice()" class="w-full border border-dashed border-[#00ffcc] text-[#00ffcc] py-3 rounded-xl text-base font-bold bg-[#00ffcc]/10 shadow-md cursor-pointer">＋ 機器追加 (各種機器画面へ)</button>
     </div>
@@ -296,6 +296,7 @@
           titleWrap.classList.add('hidden');
         }
 
+        // LIO-04（3）を含む3番目以降の画面で追加ボタンを表示
         if (currentStep >= 3) {
           addBtnWrap.classList.remove('hidden');
         } else {
@@ -501,82 +502,4 @@
         try {
           const text = event.target.result;
           const lines = text.split(/\r\n|\n/).map(l => l.trim()).filter(l => l.length > 0);
-          const clean = (val) => val ? val.replace(/^"|"$/g, '').trim().toUpperCase() : '';
-
-          lines.forEach(line => {
-            const cols = line.split(',').map(clean);
-            if (cols[0].includes('製造指図書')) {
-              document.getElementById('docNo').value = cols[1] || '';
-              document.getElementById('customer').value = cols[3] || '';
-            } else if (cols[0] === '機種名') {
-              document.getElementById('modelName').value = cols[1] || '';
-              document.getElementById('unitNo').value = cols[3] || '';
-            } else if (cols[0] === '記入日') {
-              document.getElementById('entryDate').value = cols[1] || document.getElementById('entryDate').value;
-              document.getElementById('orderQty').value = cols[3] || '';
-            } else if (cols[2] === 'エレキ担当') {
-              document.getElementById('elecStaff').value = cols[3] || '';
-            }
-          });
-
-          const headerIdx = lines.findIndex(l => l.includes('No,製品型式') || l.includes('NO,製品型式'));
-          if (headerIdx !== -1) {
-            const itemLines = lines.slice(headerIdx + 1);
-            let newItems = [
-              { title: '電源ユニット', model: '', serial: '', remarks: '' },
-              { title: 'CPU', model: '', serial: '', remarks: '' },
-              { title: 'ベースユニット', model: '', serial: '', remarks: '' },
-              { title: 'LIO-04', model: '', serial: '', remarks: '' }
-            ];
-
-            itemLines.forEach((line, idx) => {
-              if (idx >= 25) return;
-              const match = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
-              const cols = match ? match.map(clean) : [];
-              const no = parseInt(cols[0], 10);
-              if (isNaN(no)) return;
-
-              const rowData = {
-                model: cols[1] || '',
-                serial: cols[2] || '',
-                title: cols[3] || '',
-                remarks: cols[4] || ''
-              };
-
-              if (no >= 1 && no <= 4) {
-                newItems[no - 1].model = rowData.model;
-                newItems[no - 1].serial = rowData.serial;
-                newItems[no - 1].remarks = rowData.remarks;
-              } else if (no >= 5) {
-                if (rowData.model || rowData.serial || rowData.title || rowData.remarks) {
-                  newItems.push({
-                    title: rowData.title || '各種機器',
-                    model: rowData.model,
-                    serial: rowData.serial,
-                    remarks: rowData.remarks
-                  });
-                }
-              }
-            });
-            items = newItems;
-          }
-          alert('CSVファイルからデータを復元しました！');
-          document.getElementById('csvFileInput').value = '';
-        } catch (err) {
-          alert('CSVファイルの読み込みに失敗しました。');
-        }
-      };
-      reader.readAsText(file, 'UTF-8');
-    }
-
-    function saveCSV() {
-      saveCurrentForm();
-      const docNo = document.getElementById('docNo').value.toUpperCase();
-      const modelName = document.getElementById('modelName').value.toUpperCase();
-      const unitNo = document.getElementById('unitNo').value || '1';
-      const filename = `${yy}${mm}${dd}_${modelName || '機種'}_${docNo || '指図書'}_${unitNo}.csv`;
-
-      let csv = "\uFEFF";
-      csv += `製造指図書No,${docNo},客先名,${document.getElementById('customer').value.toUpperCase()}\n`;
-      csv += `機種名,${modelName},号機No,${unitNo}\n`;
-      csv +=
+          const clean =
