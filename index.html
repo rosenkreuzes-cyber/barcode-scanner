@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#042219" />
-  <title>シリアル記入シート - QuickScan DB (印刷完全動作版)</title>
+  <title>シリアル記入シート - QuickScan DB</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -18,7 +18,7 @@
     }
     input { color-scheme: dark; text-transform: uppercase; }
 
-    /* A4縦サイズ1ページに綺麗に収める印刷設定 */
+    /* A4縦サイズ1ページに綺麗にフィットさせる印刷設定 */
     @media print {
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       html, body {
@@ -44,9 +44,9 @@
       }
       th, td {
         border: 1px solid #000 !important;
-        padding: 2px 4px !important;
-        font-size: 9px !important;
-        line-height: 1.15 !important;
+        padding: 4px 6px !important;
+        font-size: 11px !important;
+        line-height: 1.25 !important;
         color: black !important;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -55,7 +55,7 @@
       th { background-color: #f2f2f2 !important; }
       @page {
         size: A4 portrait;
-        margin: 6mm;
+        margin: 10mm;
       }
     }
   </style>
@@ -172,15 +172,14 @@
       <div class="flex gap-2">
         <button type="button" onclick="document.getElementById('csvFileInput').click()" class="bg-[#093325] border border-[#E6DAA6] text-[#E6DAA6] font-bold px-3 py-2 rounded-full text-sm cursor-pointer">📂 読込</button>
         <button type="button" onclick="saveCSV()" class="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] font-bold px-4 py-2 rounded-full text-sm cursor-pointer">💾 CSV保存</button>
-        <!-- 印刷ボタン：確実にダイアログを呼ぶよう直接指定 -->
         <button type="button" onclick="triggerPrint()" class="bg-[#F5D887] text-[#042219] font-bold px-4 py-2 rounded-full text-sm shadow-md cursor-pointer">🖨 印刷</button>
       </div>
     </div>
 
-    <!-- 印刷エリア -->
+    <!-- A4サイズに綺麗にフィットする印刷エリア -->
     <div class="print-area bg-white text-black p-2 rounded-lg shadow-xl w-full">
-      <h1 class="text-center font-bold text-base mb-1.5 border-b-2 border-black pb-1">シリアル記入シート</h1>
-      <table class="w-full text-xs border-collapse border border-black mb-1.5 table-fixed">
+      <h1 class="text-center font-bold text-lg mb-2 border-b-2 border-black pb-1">シリアル記入シート</h1>
+      <table class="w-full text-xs border-collapse border border-black mb-2 table-fixed">
         <tbody>
           <tr>
             <th class="border border-black p-1 bg-gray-100 w-24">製造指図書No</th>
@@ -315,7 +314,7 @@
             const rowData = items[i] || { model: '', serial: '', title: '', remarks: '' };
             const displayTitle = rowData.title || (i < 4 ? items[i].title : '');
             tbody.innerHTML += `
-              <tr class="h-5">
+              <tr class="h-6">
                 <td class="border border-black text-center font-bold bg-gray-50">${i + 1}</td>
                 <td class="border border-black px-1 font-bold truncate">${rowData.model}</td>
                 <td class="border border-black px-1 font-bold truncate">${rowData.serial}</td>
