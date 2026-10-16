@@ -18,7 +18,7 @@
     }
     input { color-scheme: dark; text-transform: uppercase; }
 
-    /* A4縦1ページに確実に収めるための印刷設定 */
+    /* A4縦サイズに最適化し、潰れを防ぐ印刷設定 */
     @media print {
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       html, body {
@@ -26,7 +26,6 @@
         color: black !important;
         width: 100% !important;
         height: 100% !important;
-        overflow: hidden !important;
       }
       .no-print { display: none !important; }
       .print-area {
@@ -45,9 +44,9 @@
       }
       th, td {
         border: 1px solid #000 !important;
-        padding: 1px 2px !important;
-        font-size: 8px !important;
-        line-height: 1.0 !important;
+        padding: 3px 4px !important;
+        font-size: 10px !important;
+        line-height: 1.2 !important;
         color: black !important;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -56,7 +55,7 @@
       th { background-color: #f2f2f2 !important; }
       @page {
         size: A4 portrait;
-        margin: 4mm;
+        margin: 8mm;
       }
     }
   </style>
@@ -177,45 +176,45 @@
       </div>
     </div>
 
-    <!-- 1ページ完全強制収容エリア -->
-    <div class="print-area bg-white text-black p-1 rounded-lg shadow-xl w-full">
-      <h1 class="text-center font-bold text-sm mb-0.5 border-b border-black pb-0.5">シリアル記入シート</h1>
-      <table class="w-full text-[9px] border-collapse border border-black mb-0.5 table-fixed">
+    <!-- A4サイズ感に合わせた適切な余白・フォントサイズの印刷エリア -->
+    <div class="print-area bg-white text-black p-2 rounded-lg shadow-xl w-full">
+      <h1 class="text-center font-bold text-lg mb-1.5 border-b-2 border-black pb-1">シリアル記入シート</h1>
+      <table class="w-full text-xs border-collapse border border-black mb-2 table-fixed">
         <tbody>
           <tr>
-            <th class="border border-black p-0.5 bg-gray-100 w-20">製造指図書No</th>
-            <td id="p-docNo" class="border border-black p-0.5 font-bold truncate"></td>
-            <th class="border border-black p-0.5 bg-gray-100 w-14">客先名</th>
-            <td id="p-customer" class="border border-black p-0.5 truncate"></td>
+            <th class="border border-black p-1 bg-gray-100 w-24">製造指図書No</th>
+            <td id="p-docNo" class="border border-black p-1 font-bold truncate"></td>
+            <th class="border border-black p-1 bg-gray-100 w-16">客先名</th>
+            <td id="p-customer" class="border border-black p-1 truncate"></td>
           </tr>
           <tr>
-            <th class="border border-black p-0.5 bg-gray-100">機種名</th>
-            <td id="p-modelName" class="border border-black p-0.5 font-bold truncate"></td>
-            <th class="border border-black p-0.5 bg-gray-100">号機No</th>
-            <td id="p-unitNo" class="border border-black p-0.5 truncate"></td>
+            <th class="border border-black p-1 bg-gray-100">機種名</th>
+            <td id="p-modelName" class="border border-black p-1 font-bold truncate"></td>
+            <th class="border border-black p-1 bg-gray-100">号機No</th>
+            <td id="p-unitNo" class="border border-black p-1 truncate"></td>
           </tr>
           <tr>
-            <th class="border border-black p-0.5 bg-gray-100">記入日</th>
-            <td id="p-entryDate" class="border border-black p-0.5 truncate"></td>
-            <th class="border border-black p-0.5 bg-gray-100">発注台数</th>
-            <td id="p-orderQty" class="border border-black p-0.5 truncate"></td>
+            <th class="border border-black p-1 bg-gray-100">記入日</th>
+            <td id="p-entryDate" class="border border-black p-1 truncate"></td>
+            <th class="border border-black p-1 bg-gray-100">発注台数</th>
+            <td id="p-orderQty" class="border border-black p-1 truncate"></td>
           </tr>
           <tr>
-            <th class="border border-black p-0.5 bg-gray-100" colspan="2"></th>
-            <th class="border border-black p-0.5 bg-gray-100">エレキ担当</th>
-            <td id="p-elecStaff" class="border border-black p-0.5 truncate"></td>
+            <th class="border border-black p-1 bg-gray-100" colspan="2"></th>
+            <th class="border border-black p-1 bg-gray-100">エレキ担当</th>
+            <td id="p-elecStaff" class="border border-black p-1 truncate"></td>
           </tr>
         </tbody>
       </table>
 
-      <table class="w-full text-[9px] border-collapse border border-black table-fixed">
+      <table class="w-full text-xs border-collapse border border-black table-fixed">
         <thead>
           <tr class="bg-gray-200">
-            <th class="border border-black p-0.5 text-center w-6">No</th>
-            <th class="border border-black p-0.5 w-[28%]">製品型式</th>
-            <th class="border border-black p-0.5 w-[28%]">シリアルNo</th>
-            <th class="border border-black p-0.5 w-[18%]">機器名称</th>
-            <th class="border border-black p-0.5">備考</th>
+            <th class="border border-black p-1 text-center w-8">No</th>
+            <th class="border border-black p-1 w-[28%]">製品型式</th>
+            <th class="border border-black p-1 w-[28%]">シリアルNo</th>
+            <th class="border border-black p-1 w-[18%]">機器名称</th>
+            <th class="border border-black p-1">備考</th>
           </tr>
         </thead>
         <tbody id="p-tbody"></tbody>
@@ -315,7 +314,7 @@
             const rowData = items[i] || { model: '', serial: '', title: '', remarks: '' };
             const displayTitle = rowData.title || (i < 4 ? items[i].title : '');
             tbody.innerHTML += `
-              <tr class="h-3.5">
+              <tr class="h-6">
                 <td class="border border-black text-center font-bold bg-gray-50">${i + 1}</td>
                 <td class="border border-black px-1 font-bold truncate">${rowData.model}</td>
                 <td class="border border-black px-1 font-bold truncate">${rowData.serial}</td>
