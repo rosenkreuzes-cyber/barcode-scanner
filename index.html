@@ -132,7 +132,7 @@
     <!-- 超コンパクト（高さ1/3程度：h-20）な横長カメラファインダーエリア -->
     <div id="camera-container" class="w-full hidden space-y-1 bg-[#093325] border border-[#00ffcc]/40 p-2 rounded-xl shadow-md">
       <div class="flex justify-between items-center text-xs text-[#00ffcc] px-1 font-bold">
-        <span id="cam-status">📷 ターゲットにバーコードを合わせてください</span>
+        <span id="cam-status">📷 バーコードを合わせてください</span>
         <button type="button" onclick="closeCamera()" class="text-red-300 hover:text-red-100 cursor-pointer">✕ 閉じる</button>
       </div>
       <div class="relative w-full h-20 bg-black overflow-hidden flex items-center justify-center rounded-lg">
@@ -260,8 +260,8 @@
     let isStarted = false;
     let mediaStream = null;
     let codeReader = null;
-    let activeTargetFieldId = null; // どの入力欄に対してスキャンしているかを保持
-    let scannedTemporaryValue = ""; // 決定されるまでの仮の値
+    let activeTargetFieldId = null; 
+    let scannedTemporaryValue = ""; 
 
     try {
       if (typeof ZXing !== 'undefined') {
@@ -406,7 +406,6 @@
       }, 100);
     }
 
-    // 指定されたフィールド用のカメラファインダーを開く
     async function openCameraFor(fieldId) {
       activeTargetFieldId = fieldId;
       scannedTemporaryValue = "";
@@ -433,7 +432,7 @@
         status.innerText = "🎯 バーコードを合わせて「撮影して読取」を押してください";
       } catch (e) {
         alert('カメラを起動できませんでした。権限をご確認ください。');
-        status.innerText = "起動エラー";
+        status.innerText = "起動エラー: 権限を確認してください";
       }
     }
 
@@ -447,13 +446,16 @@
       activeTargetFieldId = null;
     }
 
-    // 撮影してバーコード解析（仮読み込み）
+    // 撮影してバーコード解析（結果を明確に表示・反映）
     async function captureAndScanBarcode() {
       const video = document.getElementById('video');
       const canvas = document.getElementById('canvas');
       const preview = document.getElementById('photo-preview');
       const status = document.getElementById('cam-status');
-      if (!video || !mediaStream) return;
+      if (!video || !mediaStream) {
+        alert("カメラが起動していません。");
+        return;
+      }
 
       const vWidth = video.videoWidth || 1280;
       const vHeight = video.videoHeight || 720;
@@ -465,30 +467,31 @@
       preview.src = canvas.toDataURL('image/jpeg', 0.95);
       preview.classList.remove('hidden');
       video.classList.add('hidden');
-      status.innerText = "🔍 解析中...";
+      status.innerText = "🔍 バーコード解析中...";
 
       try {
         if (!codeReader) {
           codeReader = new ZXing.BrowserBarcodeReader();
         }
+        
+        // ZXingで静止画をデコード
         const result = await codeReader.decodeFromImage(undefined, canvas);
         if (result && result.text) {
           scannedTemporaryValue = result.text.trim().toUpperCase();
-          status.innerText = `✨ 読取成功: ${scannedTemporaryValue} (「決定」を押してください)`;
+          status.innerText = `✅ 読取成功: ${scannedTemporaryValue} (「決定」を押してください)`;
           
-          // 該当フィールドに仮反映
+          // すぐに入力欄に仮セット
           if (activeTargetFieldId) {
             document.getElementById(activeTargetFieldId).value = scannedTemporaryValue;
           }
         } else {
-          status.innerText = "⚠️ 未検出。「再読込」で撮り直してください。";
+          status.innerText = "⚠️ バーコード未検出。「再読込」で再撮影してください。";
         }
       } catch (err) {
-        status.innerText = "⚠️ 読取失敗。「再読込」で撮り直してください。";
+        status.innerText = "⚠️ 検出失敗（バーコードを枠内に合わせてください）";
       }
     }
 
-    // 再読み込み（再撮影）ボタン
     function retryScan() {
       const video = document.getElementById('video');
       const preview = document.getElementById('photo-preview');
@@ -499,11 +502,16 @@
       status.innerText = "🎯 再度バーコードを合わせてください";
     }
 
-    // 決定ボタン
     function confirmScan() {
-      if (activeTargetFieldId && scannedTemporaryValue) {
-        document.getElementById(activeTargetFieldId).value = scannedTemporaryValue;
-        saveCurrentForm();
+      if (activeTargetFieldId) {
+        const val = document.getElementById(activeTargetFieldId).value;
+        if (val) {
+          scannedTemporaryValue = val.trim().toUpperCase();
+        }
+        if (scannedTemporaryValue) {
+          document.getElementById(activeTargetFieldId).value = scannedTemporaryValue;
+          saveCurrentForm();
+        }
       }
       closeCamera();
     }
