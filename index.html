@@ -169,13 +169,6 @@
 
     <!-- 各入力フィールドの脇にカメラ・読取補助ボタンを配置 -->
     <div class="bg-[#093325] border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3 shadow-lg">
-      <div id="title-field-wrap" class="hidden">
-        <div class="flex justify-between items-center mb-1">
-          <label class="text-sm font-bold">機器名称</label>
-          <button type="button" onclick="openNativeCamera('f-title')" class="bg-[#042219] border border-[#00ffcc] text-[#00ffcc] text-xs px-3 py-1.5 rounded-lg font-bold cursor-pointer hover:bg-[#00ffcc]/10">📷 カメラ起動</button>
-        </div>
-        <input type="text" id="f-title" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5 text-base uppercase" placeholder="例: サーボパック" />
-      </div>
       <div class="rounded-xl border border-[#00ffcc]/50 bg-[#042219]/70 p-3">
         <div class="flex justify-between items-center gap-2 mb-2">
           <div>
@@ -319,15 +312,7 @@
         document.getElementById('f-serial').value = item.serial || '';
         document.getElementById('f-remarks').value = item.remarks || '';
 
-        const titleWrap = document.getElementById('title-field-wrap');
         const addBtnWrap = document.getElementById('add-btn-wrap');
-
-        if (currentStep >= 4) {
-          titleWrap.classList.remove('hidden');
-          document.getElementById('f-title').value = item.title || '';
-        } else {
-          titleWrap.classList.add('hidden');
-        }
 
         // LIO-04（index 3）画面にも機器追加ボタンを表示
         if (currentStep >= 3) {
