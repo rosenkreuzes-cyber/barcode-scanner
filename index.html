@@ -17,15 +17,30 @@
       flex-direction: column;
     }
     input { color-scheme: dark; text-transform: uppercase; }
-    .camera-modal { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.88); padding: 12px; overflow-y: auto; display: flex; align-items: flex-start; justify-content: center; }
+    .camera-modal { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.88); padding: 12px; overflow: auto; display: flex; align-items: stretch; justify-content: center; }
     .camera-modal.hidden { display: none; }
-    .camera-panel { width: 100%; max-width: 720px; background: #093325; border: 1px solid rgba(230,218,166,.4); border-radius: 16px; padding: 14px; margin: auto 0; }
-    .camera-stage { position: relative; width: 100%; background: #000; overflow: hidden; border-radius: 10px; touch-action: none; }
-    #cameraVideo { display: block; width: 100%; height: auto; max-height: 52vh; object-fit: contain; }
+    .camera-panel { width: 100%; max-width: 720px; background: #093325; border: 1px solid rgba(230,218,166,.4); border-radius: 16px; padding: 14px; margin: auto 0; display: flex; flex-direction: column; }
+    .camera-stage { position: relative; width: 100%; min-height: 220px; flex: 1 1 auto; background: #000; overflow: hidden; border-radius: 10px; touch-action: none; }
+    #cameraVideo { display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; }
     .scan-frame { position: absolute; left: 10%; top: 8%; width: 80%; height: 22%; border: 3px solid #00ffcc; background: rgba(0,255,204,.04); cursor: move; touch-action: none; }
     .scan-frame.active { border-color: #F5D887; z-index: 4; }
     .scan-frame span { position: absolute; left: 0; top: 0; background: #00ffcc; color: #042219; font-size: 11px; font-weight: 800; padding: 2px 5px; white-space: nowrap; }
     .scan-frame.active span { background: #F5D887; }
+
+    @media (max-width: 640px) {
+      .camera-modal { padding: 0; overflow: hidden; }
+      .camera-panel { width: 100%; max-width: none; height: 100vh; height: 100dvh; min-height: 0; border-radius: 0; border: 0; padding: max(8px, env(safe-area-inset-top)) 10px max(8px, env(safe-area-inset-bottom)); gap: 6px; }
+      .camera-panel > .flex { flex: 0 0 auto; }
+      .camera-panel > p:first-of-type { flex: 0 0 auto; font-size: 12px; line-height: 1.35; margin-bottom: 2px; }
+      .camera-panel > .rounded-lg.border { flex: 0 0 auto; margin-bottom: 2px; padding: 6px 8px; font-size: 12px; }
+      .camera-stage { flex: 1 1 0; min-height: 0; height: auto; }
+      #cameraVideo { width: 100%; height: 100%; max-height: none; object-fit: contain; }
+      #cameraStatus { flex: 0 0 auto; margin-top: 2px; margin-bottom: 2px; font-size: 12px; }
+      .camera-panel > .grid.grid-cols-2.gap-3 { flex: 0 0 auto; gap: 5px 10px; font-size: 11px; }
+      .camera-panel input[type=range] { height: 20px; }
+      .camera-panel > .grid.grid-cols-2.gap-2 { flex: 0 0 auto; gap: 6px; margin-top: 4px; }
+      .camera-panel > .grid.grid-cols-2.gap-2 button { padding-top: 8px; padding-bottom: 8px; font-size: 12px; }
+    }
 
     @media print {
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
