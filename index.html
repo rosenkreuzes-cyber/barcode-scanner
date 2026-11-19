@@ -296,6 +296,8 @@ let items = [
 let currentStep = 0;
 let isStarted = false;
 let cameraStream = null;
+let capturedImageUrl = null;
+let activeOcrRequest = null;
 
 function saveCurrentForm() {
   if (!isStarted || currentStep < 0 || currentStep >= items.length || currentStep === 999) return;
@@ -409,12 +411,12 @@ function triggerPrint() { setTimeout(() => window.print(),100); }
 
 async function openCameraScanner() {
   saveCurrentForm();
+  cancelOcrRequest();
+  clearCapturedImage();
   const modal = document.getElementById('cameraModal');
   const video = document.getElementById('cameraVideo');
   const status = document.getElementById('cameraStatus');
   modal.classList.remove('hidden');
-  document.getElementById('capturedImage').classList.add('hidden');
-  document.getElementById('capturedImage').src = '';
   video.classList.remove('hidden');
   document.getElementById('ocrResultPanel').classList.add('hidden');
   status.textContent = 'カメラを準備しています…';
@@ -442,21 +444,37 @@ async function openCameraScanner() {
 }
 
 function closeCamera() {
+  cancelOcrRequest();
   if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
   cameraStream = null;
   const video = document.getElementById('cameraVideo');
   if (video) { video.srcObject = null; video.classList.remove('hidden'); }
-  const image = document.getElementById('capturedImage');
-  if (image) { image.src = ''; image.classList.add('hidden'); }
+  clearCapturedImage();
   document.getElementById('ocrResultPanel').classList.add('hidden');
   document.getElementById('cameraModal').classList.add('hidden');
 }
 
-function showCapturedImage(dataUrl) {
+function clearCapturedImage() {
+  const image = document.getElementById('capturedImage');
+  image.removeAttribute('src');
+  image.classList.add('hidden');
+  if (capturedImageUrl) URL.revokeObjectURL(capturedImageUrl);
+  capturedImageUrl = null;
+}
+
+function cancelOcrRequest() {
+  if (activeOcrRequest) activeOcrRequest.abort();
+  activeOcrRequest = null;
+  document.getElementById('captureButton').disabled = false;
+}
+
+function showCapturedImage(blob) {
+  clearCapturedImage();
   const video = document.getElementById('cameraVideo');
   const image = document.getElementById('capturedImage');
+  capturedImageUrl = URL.createObjectURL(blob);
   video.classList.add('hidden');
-  image.src = dataUrl;
+  image.src = capturedImageUrl;
   image.classList.remove('hidden');
 }
 
@@ -464,7 +482,7 @@ function showOcrResultPanel(data) {
   const panel = document.getElementById('ocrResultPanel');
   const lines = (data.lines || []).map(x => String(x.text || '').trim()).filter(Boolean);
   panel.textContent = '判定結果\n' +
-    '機種名：' + (data.model_name || '判定できず') + '\n' +
+    '製品型式：' + (data.model_name || '判定できず') + '\n' +
     'シリアルNo：' + (data.serial_no || '判定できず') + '\n' +
     'Ver・備考：' + (data.version || '判定できず') + '\n\n' +
     'OCRで読み取った文字\n' + (lines.join('\n') || '文字を認識できませんでした。');
@@ -476,10 +494,10 @@ function useNativeCameraFallback() {
   document.getElementById('nativeCameraInput').click();
 }
 
-async function postImageForOcr(blob,filename='nameplate.jpg') {
+async function postImageForOcr(blob, filename, signal) {
   const formData = new FormData();
   formData.append('image',blob,filename);
-  const response = await fetch('/api/ocr',{method:'POST',body:formData});
+  const response = await fetch('/api/ocr',{method:'POST',body:formData,signal});
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `OCRサーバーエラー (${response.status})`);
   return data;
@@ -488,91 +506,75 @@ async function postImageForOcr(blob,filename='nameplate.jpg') {
 function applyOcrFields(data) {
   const model = String(data.model_name || '').trim().toUpperCase();
   const serial = String(data.serial_no || '').trim().toUpperCase();
-  const version = String(data.version || '').trim().toUpperCase();
-
-  if (!model && !serial && !version) {
-    const lines = (data.lines || [])
-      .map(line => String(line.text || '').trim()).filter(Boolean);
-    throw new Error(
-      '機種名・シリアルNo・Verを自動判定できませんでした。\nOCR結果：\n' +
-      (lines.join('\n') || '文字を認識できませんでした。')
-    );
-  }
+  const version = String(data.version || '').trim();
+  if (!model && !serial && !version) return false;
 
   // 判定できた項目だけ上書きする
   if (model) document.getElementById('f-model').value = model;
   if (serial) document.getElementById('f-serial').value = serial;
   if (version) document.getElementById('f-remarks').value = version;
   saveCurrentForm();
-  return {model,serial,version};
+  return true;
 }
 
-function showOcrSummary(result) {
-  alert(
-    '銘板の読み取り結果\n\n' +
-    '機種名：'+(result.model || '判定できず')+'\n' +
-    'シリアルNo：'+(result.serial || '判定できず')+'\n' +
-    'Ver・備考：'+(result.version || '判定できず')
-  );
+async function analyzeCapturedImage(getBlob, filename) {
+  if (activeOcrRequest) return;
+  const controller = new AbortController();
+  activeOcrRequest = controller;
+  const button = document.getElementById('captureButton');
+  const status = document.getElementById('cameraStatus');
+  button.disabled = true;
+  document.getElementById('ocrResultPanel').classList.add('hidden');
+  status.textContent = '撮影画像を準備しています…';
+  try {
+    const blob = await getBlob();
+    if (controller.signal.aborted) return;
+    showCapturedImage(blob);
+    status.textContent = '撮影画像を表示したまま解析しています…';
+    const data = await postImageForOcr(blob, filename, controller.signal);
+    if (controller.signal.aborted) return;
+    showOcrResultPanel(data);
+    status.textContent = applyOcrFields(data)
+      ? '判定できた項目を入力しました。撮影画像と読み取り文字を確認してください。'
+      : '自動入力できる項目がありません。読み取り文字を確認して手入力してください。';
+  } catch (err) {
+    if (!controller.signal.aborted) {
+      status.textContent = `読み取りに失敗しました：${err.message || err}`;
+    }
+  } finally {
+    if (activeOcrRequest === controller) {
+      activeOcrRequest = null;
+      button.disabled = false;
+    }
+  }
 }
 
 async function captureAndAnalyze() {
   const video = document.getElementById('cameraVideo');
   const status = document.getElementById('cameraStatus');
   const canvas = document.getElementById('scanCanvas');
-  const button = document.getElementById('captureButton');
   if (!video.videoWidth || !video.videoHeight) {
     status.textContent = 'カメラ映像がありません。カメラの許可と接続を確認してください。';
     return;
   }
-  button.disabled = true;
-  try {
+  await analyzeCapturedImage(() => new Promise((resolve, reject) => {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
-    const still = canvas.toDataURL('image/jpeg',0.96);
-    showCapturedImage(still);
-    status.textContent = '撮影画像を表示したまま解析しています…';
-    const blob = await new Promise((resolve,reject) => canvas.toBlob(
+    canvas.toBlob(
       result => result ? resolve(result) : reject(new Error('撮影画像を作成できませんでした。')),
       'image/jpeg',0.96
-    ));
-    const data = await postImageForOcr(blob);
-    const result = applyOcrFields(data);
-    showOcrResultPanel(data);
-    status.textContent = '判定完了。撮影画像と読み取り文字を確認してください。閉じるボタンで戻ります。';
-  } catch (err) {
-    status.textContent = `判定できませんでした。撮影画像は表示したままです：${err.message || err}`;
-  } finally {
-    button.disabled = false;
-  }
+    );
+  }), 'nameplate.jpg');
 }
 
 async function handleNativeCapture(event) {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
-  const modal = document.getElementById('cameraModal');
-  const status = document.getElementById('cameraStatus');
-  const button = document.getElementById('captureButton');
-  modal.classList.remove('hidden');
-  button.disabled = true;
-  status.textContent = '撮影画像を表示したまま解析しています…';
+  document.getElementById('cameraModal').classList.remove('hidden');
   try {
-    const dataUrl = await new Promise((resolve,reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error('撮影画像を表示できませんでした。'));
-      reader.readAsDataURL(file);
-    });
-    showCapturedImage(dataUrl);
-    const data = await postImageForOcr(file,file.name || 'nameplate.jpg');
-    applyOcrFields(data);
-    showOcrResultPanel(data);
-    status.textContent = '判定完了。撮影画像と読み取り文字を確認してください。閉じるボタンで戻ります。';
-  } catch (err) {
-    status.textContent = `判定できませんでした。撮影画像は表示したままです：${err.message || err}`;
+    await analyzeCapturedImage(() => file, file.name || 'nameplate.jpg');
   } finally {
-    button.disabled = false;
     event.target.value = '';
   }
 }
