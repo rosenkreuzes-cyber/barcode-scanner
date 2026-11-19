@@ -208,7 +208,7 @@ button:disabled { opacity:.55; cursor:wait; }
   <div id="add-btn-wrap" class="hidden">
     <button type="button" onclick="addLioDevice()"
       class="w-full border border-dashed border-[#00ffcc] text-[#00ffcc] py-3 rounded-xl font-bold bg-[#00ffcc]/10">
-      ＋ LIO-04機器を追加
+      ＋ ユニット機器を追加
     </button>
   </div>
 
@@ -301,7 +301,7 @@ function saveCurrentForm() {
   if (!isStarted || currentStep < 0 || currentStep >= items.length || currentStep === 999) return;
   items[currentStep].model = document.getElementById('f-model').value.toUpperCase();
   items[currentStep].serial = document.getElementById('f-serial').value.toUpperCase();
-  items[currentStep].remarks = document.getElementById('f-remarks').value.toUpperCase();
+  items[currentStep].remarks = document.getElementById('f-remarks').value;
 }
 
 function escapeHtml(value) {
@@ -349,8 +349,9 @@ function render() {
   for (let i=0;i<25;i++) {
     const row = items[i] || {model:'',serial:'',title:'',remarks:''};
     const isCustomUnit = /^ユニット登録\d+$/.test(row.title || '');
-    const title = isCustomUnit ? (row.remarks || '') : (row.title || (i < 4 ? items[i].title : ''));
-    const printRemarks = row.remarks ? row.remarks : '';
+    const printRemarks = row.remarks?.trim() ? row.remarks : '';
+    const hasInput = [row.model, row.serial, printRemarks].some(value => value?.trim());
+    const title = !hasInput ? '' : isCustomUnit ? printRemarks : (row.title || '');
     tbody.innerHTML += `<tr class="h-[15px]">
       <td class="border border-black text-center font-bold bg-gray-50">${i+1}</td>
       <td class="border border-black px-1 font-bold">${escapeHtml(row.model)}</td>
@@ -384,9 +385,8 @@ function addLioDevice() {
     return;
   }
   // LIO-04の直後、各種機種（ユニット登録）より前に追加する。
-  const lioCount = items.filter(x => /^LIO-04(?:追加|\s)/.test(x.title || '')).length + 1;
   const insertAt = items.findIndex(x => /^ユニット登録\d+$/.test(x.title || ''));
-  const newItem = {title:`LIO-04追加${lioCount}`,model:'',serial:'',remarks:''};
+  const newItem = {title:'LIO-04',model:'',serial:'',remarks:''};
   if (insertAt >= 0) {
     items.splice(insertAt, 0, newItem);
     currentStep = insertAt;
@@ -630,12 +630,15 @@ function loadCSVFile(event) {
         ];
 
         lines.slice(header+1).forEach(line => {
-          const cols = parseCsvLine(line).map(clean);
+          const rawCols = parseCsvLine(line);
+          const cols = rawCols.map(clean);
           const no = parseInt(cols[0],10);
           if (!Number.isFinite(no) || no < 1 || no > 25) return;
           const row = {
             model:cols[1] || '', serial:cols[2] || '',
-            title:cols[3] || '', remarks:cols[4] || ''
+            // 旧版の「LIO」と連番付き名称は、機器名称欄だけ「LIO-04」に統一する。
+            title:/^LIO(?:(?:-04)?追加\s*\d+)?$/i.test(cols[3]) ? 'LIO-04' : (cols[3] || ''),
+            remarks:cols[4] ? rawCols[4] : ''
           };
 
           if (no <= 4) {
@@ -656,6 +659,7 @@ function loadCSVFile(event) {
         items = loaded.slice(0,25);
       }
 
+      if (isStarted && currentStep === 999) render();
       alert('CSVファイルからデータを復元しました！');
     } catch (err) {
       alert(`CSVファイルの読み込みに失敗しました。\n${err.message || err}`);
