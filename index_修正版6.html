@@ -1,0 +1,783 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#042219">
+<title>シリアル記入シート - QuickScan DB</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  background:#042219; color:#E6DAA6;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  min-height:100vh; display:flex; flex-direction:column;
+}
+input { color-scheme:dark; text-transform:uppercase; }
+.camera-modal {
+  position:fixed; inset:0; z-index:1000;
+  background:rgba(0,0,0,.88); padding:12px; overflow-y:auto;
+  display:flex; align-items:flex-start; justify-content:center;
+}
+.camera-modal.hidden { display:none; }
+.camera-panel {
+  width:100%; max-width:720px; background:#093325;
+  border:1px solid rgba(230,218,166,.4);
+  border-radius:16px; padding:14px; margin:auto 0;
+}
+.camera-stage {
+  position:relative; width:100%; aspect-ratio:4/3;
+  background:#000; overflow:hidden; border-radius:10px;
+}
+#cameraVideo, #capturedImage {
+  position:absolute; inset:0; display:block;
+  width:100%; height:100%; max-height:none;
+  object-fit:contain; object-position:center;
+}
+#capturedImage.hidden { display:none; }
+button:disabled { opacity:.55; cursor:wait; }
+@media print {
+  * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  html,body {
+    background:white!important; color:black!important;
+    width:100%!important; height:100%!important; overflow:hidden!important;
+  }
+  .no-print { display:none!important; }
+  .print-area {
+    display:block!important; width:100%!important; max-width:100%!important;
+    margin:0!important; padding:0!important; box-shadow:none!important;
+    background:white!important;
+  }
+  table { width:100%!important; border-collapse:collapse!important; table-layout:fixed!important; }
+  th,td {
+    border:1px solid #000!important; padding:2px 4px!important;
+    font-size:9.5px!important; line-height:1.1!important; color:black!important;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  th { background:#f2f2f2!important; }
+  @page { size:A4 portrait; margin:4mm; }
+}
+</style>
+</head>
+<body class="p-3 max-w-xl mx-auto w-full">
+
+<input type="file" id="csvFileInput" accept=".csv" class="hidden" onchange="loadCSVFile(event)">
+<input type="file" id="nativeCameraInput" accept="image/*" capture="environment" class="hidden" onchange="handleNativeCapture(event)">
+
+<!-- カメラ画面：銘板全体を撮影 -->
+<div id="cameraModal" class="camera-modal hidden" role="dialog" aria-modal="true">
+  <div class="camera-panel">
+    <div class="flex items-center justify-between gap-2 mb-2">
+      <h2 class="text-xl font-bold text-[#F5D887]">📷 銘板読み取り</h2>
+      <button type="button" onclick="closeCamera()" class="px-3 py-2 rounded-lg border border-[#E6DAA6]/40">閉じる ✕</button>
+    </div>
+
+    <p class="text-sm mb-3">
+      銘板全体が映るように撮影してください。機種名・シリアルNo・Verを自動判定します。
+    </p>
+
+    <div class="rounded-lg border border-[#00ffcc]/50 bg-[#042219] px-3 py-2 mb-3 text-sm">
+      <strong class="text-[#00ffcc]">銘板全体を撮影してください</strong>
+      <p class="mt-1">枠合わせは不要です。銘板全体が画像に入るようにしてください。</p>
+    </div>
+
+    <div id="cameraStage" class="camera-stage">
+      <video id="cameraVideo" autoplay playsinline muted></video>
+      <img id="capturedImage" class="hidden" alt="撮影した銘板画像">
+    </div>
+
+    <p id="cameraStatus" class="text-sm mt-2 mb-2">カメラを準備しています…</p>
+    <div id="ocrResultPanel" class="hidden rounded-lg border border-[#00ffcc]/50 bg-[#042219] p-3 text-sm whitespace-pre-wrap mb-3"></div>
+
+    <div class="grid grid-cols-1 gap-2 mt-4">
+      <button id="captureButton" type="button" onclick="captureAndAnalyze()"
+        class="bg-[#F5D887] text-[#042219] font-bold py-3 rounded-xl">
+        📸 銘板全体を撮影して読み取り
+      </button>
+      <button type="button" onclick="useNativeCameraFallback()"
+        class="border border-[#E6DAA6]/50 text-[#E6DAA6] font-bold py-2 rounded-xl">
+        端末標準カメラで撮影
+      </button>
+    </div>
+    <canvas id="scanCanvas" class="hidden"></canvas>
+  </div>
+</div>
+
+<!-- TOP画面 -->
+<div id="view-home" class="space-y-4">
+  <h1 class="text-3xl font-extrabold text-center text-[#F5D887] mt-2">QuickScan DB</h1>
+  <p class="text-sm text-center text-[#E6DAA6]/80">基本情報設定</p>
+
+  <div class="bg-[#093325] border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3 shadow-lg">
+    <button type="button" onclick="document.getElementById('csvFileInput').click()"
+      class="w-full border-2 border-[#00ffcc] text-[#00ffcc] font-bold py-3 rounded-xl">
+      📂 保存済みCSVを読み込んで編集・追記
+    </button>
+  </div>
+
+  <div class="bg-[#093325] border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3 shadow-lg">
+    <div>
+      <label class="block text-sm font-bold mb-1">製造指図書No</label>
+      <input id="docNo" type="text" placeholder="例: ORD-2026-X"
+        class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-1">機種名</label>
+      <input id="modelName" type="text" placeholder="例: MODEL-A100"
+        class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5">
+    </div>
+    <div class="flex gap-2">
+      <div class="flex-1">
+        <label class="block text-sm font-bold mb-1">記入日</label>
+        <input id="entryDate" type="text" readonly
+          class="w-full bg-[#042219]/50 border border-[#E6DAA6]/20 rounded-xl px-3 py-2.5">
+      </div>
+      <div class="flex-1">
+        <label class="block text-sm font-bold mb-1">客先名</label>
+        <input id="customer" type="text" placeholder="客先名"
+          class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5">
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <div class="flex-1">
+        <label class="block text-sm font-bold mb-1">号機No</label>
+        <input id="unitNo" type="number" placeholder="1"
+          class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5">
+      </div>
+      <div class="flex-1">
+        <label class="block text-sm font-bold mb-1">発注台数</label>
+        <input id="orderQty" type="number" placeholder="1"
+          class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5">
+      </div>
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-1">エレキ担当</label>
+      <input id="elecStaff" type="text" placeholder="担当者名"
+        class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5">
+    </div>
+  </div>
+
+  <button type="button" onclick="goToInput()"
+    class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-xl mt-4">
+    入力を開始 (電源ユニットへ)
+  </button>
+</div>
+
+<!-- 機器入力画面 -->
+<div id="view-input" class="hidden space-y-3">
+  <div class="flex justify-between items-center text-base font-bold">
+    <button type="button" onclick="prevStep()">← 前へ</button>
+    <span id="step-indicator">1 / 5</span>
+    <button type="button" onclick="goToTop()" class="text-[#F5D887]">🏠 TOP</button>
+  </div>
+
+  <h2 id="unit-title" class="text-2xl font-bold text-center text-[#F5D887]">電源ユニット 画面</h2>
+
+  <div class="bg-[#093325] border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3 shadow-lg">
+    <div class="rounded-xl border border-[#00ffcc]/50 bg-[#042219]/70 p-3">
+      <div class="flex justify-between items-center gap-2">
+        <div>
+          <div class="text-sm font-bold text-[#00ffcc]">銘板カメラ読み取り</div>
+          <div class="text-xs opacity-80">銘板全体を1枚撮影して自動読み取り</div>
+        </div>
+        <button type="button" onclick="openCameraScanner()"
+          class="shrink-0 bg-[#00ffcc] text-[#042219] text-sm px-4 py-2 rounded-lg font-extrabold">
+          📷 撮影・読取
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-bold mb-1">製品型式</label>
+      <input id="f-model" type="text" placeholder="型式"
+        class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-1">シリアルNo</label>
+      <input id="f-serial" type="text" placeholder="シリアル"
+        class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-1">備考 (バージョン情報等)</label>
+      <input id="f-remarks" type="text" placeholder="例: A03"
+        class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5">
+    </div>
+  </div>
+
+  <div id="add-btn-wrap" class="hidden space-y-2">
+    <button type="button" onclick="addLioDevice()"
+      class="w-full border border-dashed border-[#00ffcc] text-[#00ffcc] py-3 rounded-xl font-bold bg-[#00ffcc]/10">
+      ＋ LIO-04機器を追加
+    </button>
+    <button type="button" onclick="goToCustomScreen()"
+      class="w-full border border-[#F5D887]/60 text-[#F5D887] py-3 rounded-xl font-bold">
+      各種機種の登録画面へ
+    </button>
+  </div>
+
+  <button type="button" onclick="nextStep()"
+    class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-lg">
+    次へ
+  </button>
+</div>
+
+<!-- 各種機種 登録画面 -->
+<div id="view-custom" class="hidden space-y-3">
+  <div class="flex justify-between items-center text-base font-bold">
+    <button type="button" onclick="prevFromCustom()">← LIO-04へ戻る</button>
+    <span id="custom-step-indicator">各種機種 1</span>
+    <button type="button" onclick="goToTop()" class="text-[#F5D887]">🏠 TOP</button>
+  </div>
+  <h2 id="custom-unit-title" class="text-2xl font-bold text-center text-[#F5D887]">各種機種 登録</h2>
+  <div class="bg-[#093325] border border-[#E6DAA6]/30 p-4 rounded-2xl space-y-3 shadow-lg">
+    <div class="rounded-xl border border-[#00ffcc]/50 bg-[#042219]/70 p-3">
+      <div class="flex justify-between items-center gap-2">
+        <div><div class="text-sm font-bold text-[#00ffcc]">銘板カメラ読み取り</div><div class="text-xs opacity-80">銘板全体を1枚撮影して自動読み取り</div></div>
+        <button type="button" onclick="openCameraScanner()" class="shrink-0 bg-[#00ffcc] text-[#042219] text-sm px-4 py-2 rounded-lg font-extrabold">📷 撮影・読取</button>
+      </div>
+    </div>
+    <div><label class="block text-sm font-bold mb-1">製品型式</label><input id="c-model" type="text" placeholder="型式" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5"></div>
+    <div><label class="block text-sm font-bold mb-1">シリアルNo</label><input id="c-serial" type="text" placeholder="シリアル" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5"></div>
+    <div><label class="block text-sm font-bold mb-1">備考 (バージョン情報等)</label><input id="c-remarks" type="text" placeholder="備考（空欄可）" class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5"></div>
+  </div>
+  <button type="button" onclick="addCustomDevice()" class="w-full border border-dashed border-[#00ffcc] text-[#00ffcc] py-3 rounded-xl font-bold bg-[#00ffcc]/10">＋ 機器追加</button>
+  <button type="button" onclick="customNext()" class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-lg">次へ（印刷画面）</button>
+</div>
+
+<!-- 印刷プレビュー -->
+<div id="view-result" class="hidden space-y-2">
+  <div class="no-print flex flex-wrap justify-between items-center gap-2 mb-2">
+    <div class="flex gap-3 items-center">
+      <button type="button" onclick="goToInput()" class="font-bold">← 修正に戻る</button>
+      <button type="button" onclick="goToTop()" class="font-bold text-[#F5D887]">🏠 TOPへ戻る</button>
+    </div>
+    <div class="flex gap-2">
+      <button type="button" onclick="document.getElementById('csvFileInput').click()"
+        class="bg-[#093325] border border-[#E6DAA6] px-3 py-2 rounded-full text-sm">📂 読込</button>
+      <button type="button" onclick="saveCSV()"
+        class="bg-[#093325] border border-[#00ffcc] text-[#00ffcc] px-4 py-2 rounded-full text-sm">💾 CSV保存</button>
+      <button type="button" onclick="triggerPrint()"
+        class="bg-[#F5D887] text-[#042219] px-4 py-2 rounded-full text-sm">🖨 印刷</button>
+    </div>
+  </div>
+
+  <div class="print-area bg-white text-black p-1.5 rounded-lg shadow-xl w-full">
+    <h1 class="text-center font-bold text-sm mb-1 border-b border-black pb-0.5">シリアル記入シート</h1>
+    <table class="w-full text-[10px] border-collapse border border-black mb-1 table-fixed">
+      <tbody>
+        <tr>
+          <th class="border border-black p-0.5 bg-gray-100 w-20">製造指図書No</th>
+          <td id="p-docNo" class="border border-black p-0.5 font-bold"></td>
+          <th class="border border-black p-0.5 bg-gray-100 w-14">客先名</th>
+          <td id="p-customer" class="border border-black p-0.5"></td>
+        </tr>
+        <tr>
+          <th class="border border-black p-0.5 bg-gray-100">機種名</th>
+          <td id="p-modelName" class="border border-black p-0.5 font-bold"></td>
+          <th class="border border-black p-0.5 bg-gray-100">号機No</th>
+          <td id="p-unitNo" class="border border-black p-0.5"></td>
+        </tr>
+        <tr>
+          <th class="border border-black p-0.5 bg-gray-100">記入日</th>
+          <td id="p-entryDate" class="border border-black p-0.5"></td>
+          <th class="border border-black p-0.5 bg-gray-100">発注台数</th>
+          <td id="p-orderQty" class="border border-black p-0.5"></td>
+        </tr>
+        <tr>
+          <th class="border border-black p-0.5 bg-gray-100" colspan="2"></th>
+          <th class="border border-black p-0.5 bg-gray-100">エレキ担当</th>
+          <td id="p-elecStaff" class="border border-black p-0.5"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <table class="w-full text-[10px] border-collapse border border-black table-fixed">
+      <thead>
+        <tr class="bg-gray-200">
+          <th class="border border-black p-0.5 text-center w-6">No</th>
+          <th class="border border-black p-0.5 w-[28%]">製品型式</th>
+          <th class="border border-black p-0.5 w-[28%]">シリアルNo</th>
+          <th class="border border-black p-0.5 w-[18%]">機器名称</th>
+          <th class="border border-black p-0.5">備考</th>
+        </tr>
+      </thead>
+      <tbody id="p-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const now = new Date();
+const yy = String(now.getFullYear()).slice(-2);
+const mm = String(now.getMonth()+1).padStart(2,'0');
+const dd = String(now.getDate()).padStart(2,'0');
+
+function createBaseItems() {
+  return [
+    {title:'電源ユニット',model:'',serial:'',remarks:''},
+    {title:'CPU',model:'',serial:'',remarks:''},
+    {title:'ベースユニット',model:'',serial:'',remarks:''},
+    {title:'LIO-04',model:'',serial:'',remarks:''}
+  ];
+}
+let items = createBaseItems();
+let customItems = [];
+let currentStep = 0;
+let currentCustomIndex = 0;
+let currentScreen = 'home'; // home / input / custom / result
+let isStarted = false;
+let cameraStream = null;
+let lastUnitNo = null;
+
+function allEquipmentItems() { return items.concat(customItems); }
+
+function saveCurrentForm() {
+  if (currentScreen === 'input' && items[currentStep]) {
+    items[currentStep].model = document.getElementById('f-model').value.toUpperCase();
+    items[currentStep].serial = document.getElementById('f-serial').value.toUpperCase();
+    items[currentStep].remarks = document.getElementById('f-remarks').value.toUpperCase();
+  } else if (currentScreen === 'custom' && customItems[currentCustomIndex]) {
+    customItems[currentCustomIndex].model = document.getElementById('c-model').value.toUpperCase();
+    customItems[currentCustomIndex].serial = document.getElementById('c-serial').value.toUpperCase();
+    customItems[currentCustomIndex].remarks = document.getElementById('c-remarks').value.toUpperCase();
+  }
+}
+
+function hasEquipmentData() {
+  return allEquipmentItems().some(x => x.model || x.serial || x.remarks) || items.length > 4 || customItems.length > 0;
+}
+function resetEquipmentDataForNewUnit() {
+  items = createBaseItems(); customItems = []; currentStep = 0; currentCustomIndex = 0;
+}
+function handleUnitNoChange() {
+  const nextNo = document.getElementById('unitNo').value.trim();
+  if (lastUnitNo === null) { lastUnitNo = nextNo; return; }
+  if (nextNo !== lastUnitNo) {
+    if (hasEquipmentData()) {
+      resetEquipmentDataForNewUnit();
+      currentScreen = 'home'; isStarted = false; render();
+      alert('号機Noが変更されたため、前の号機で読み取った機器データをクリアしました。基本情報は保持しています。');
+    }
+    lastUnitNo = nextNo;
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[ch]));
+}
+
+function render() {
+  const home = document.getElementById('view-home');
+  const input = document.getElementById('view-input');
+  const custom = document.getElementById('view-custom');
+  const result = document.getElementById('view-result');
+  [home,input,custom,result].forEach(x => x.classList.add('hidden'));
+
+  if (currentScreen === 'home') { home.classList.remove('hidden'); return; }
+
+  if (currentScreen === 'input') {
+    input.classList.remove('hidden');
+    const item = items[currentStep];
+    document.getElementById('unit-title').innerText = `${item.title} 画面`;
+    document.getElementById('step-indicator').innerText = `${currentStep+1} / ${items.length + customItems.length}`;
+    document.getElementById('f-model').value = item.model || '';
+    document.getElementById('f-serial').value = item.serial || '';
+    document.getElementById('f-remarks').value = item.remarks || '';
+    document.getElementById('add-btn-wrap').classList.toggle('hidden',currentStep < 3);
+    return;
+  }
+
+  if (currentScreen === 'custom') {
+    custom.classList.remove('hidden');
+    const item = customItems[currentCustomIndex];
+    document.getElementById('custom-unit-title').innerText = `${item.title} 登録`;
+    document.getElementById('custom-step-indicator').innerText = `各種機種 ${currentCustomIndex+1} / ${customItems.length}`;
+    document.getElementById('c-model').value = item.model || '';
+    document.getElementById('c-serial').value = item.serial || '';
+    document.getElementById('c-remarks').value = item.remarks || '';
+    return;
+  }
+
+  if (currentScreen === 'result') {
+    result.classList.remove('hidden');
+    document.getElementById('p-docNo').innerText = document.getElementById('docNo').value.toUpperCase();
+    document.getElementById('p-customer').innerText = document.getElementById('customer').value.toUpperCase();
+    document.getElementById('p-modelName').innerText = document.getElementById('modelName').value.toUpperCase();
+    document.getElementById('p-unitNo').innerText = document.getElementById('unitNo').value;
+    document.getElementById('p-entryDate').innerText = document.getElementById('entryDate').value;
+    document.getElementById('p-orderQty').innerText = document.getElementById('orderQty').value;
+    document.getElementById('p-elecStaff').innerText = document.getElementById('elecStaff').value.toUpperCase();
+    const tbody = document.getElementById('p-tbody');
+    tbody.innerHTML = '';
+    const rows = allEquipmentItems();
+    for (let i=0;i<25;i++) {
+      const row = rows[i] || {model:'',serial:'',title:'',remarks:''};
+      tbody.innerHTML += `<tr class="h-[15px]">
+        <td class="border border-black text-center font-bold bg-gray-50">${i+1}</td>
+        <td class="border border-black px-1 font-bold">${escapeHtml(row.model)}</td>
+        <td class="border border-black px-1 font-bold">${escapeHtml(row.serial)}</td>
+        <td class="border border-black px-1">${escapeHtml(row.title || '')}</td>
+        <td class="border border-black px-1">${escapeHtml(row.remarks || '')}</td>
+      </tr>`;
+    }
+  }
+}
+
+function goToTop() {
+  saveCurrentForm(); currentScreen = 'home'; isStarted = false; render();
+}
+function goToInput() {
+  saveCurrentForm();
+  const no = document.getElementById('unitNo').value.trim();
+  if (lastUnitNo !== null && no !== lastUnitNo && hasEquipmentData()) {
+    resetEquipmentDataForNewUnit();
+    alert('号機Noが変更されたため、機器データをクリアしました。');
+  }
+  lastUnitNo = no; currentStep = 0; currentScreen = 'input'; isStarted = true; render();
+}
+function nextStep() {
+  saveCurrentForm();
+  if (currentStep < items.length-1) { currentStep++; render(); }
+  else goToCustomScreen();
+}
+function prevStep() {
+  saveCurrentForm();
+  if (currentStep > 0) { currentStep--; render(); } else goToTop();
+}
+function addLioDevice() {
+  saveCurrentForm();
+  if (allEquipmentItems().length >= 25) { alert('登録できる機器は最大25件です。'); return; }
+  const count = items.filter(x => x.title.startsWith('LIO-04')).length;
+  items.push({title:`LIO-04 追加${count}`,model:'',serial:'',remarks:''});
+  currentStep = items.length-1; render();
+}
+function goToCustomScreen() {
+  saveCurrentForm();
+  if (customItems.length === 0) customItems.push({title:'ユニット1',model:'',serial:'',remarks:''});
+  currentCustomIndex = Math.min(currentCustomIndex,customItems.length-1);
+  currentScreen = 'custom'; isStarted = true; render();
+}
+function addCustomDevice() {
+  saveCurrentForm();
+  if (allEquipmentItems().length >= 25) { alert('登録できる機器は最大25件です。'); return; }
+  customItems.push({title:`ユニット${customItems.length+1}`,model:'',serial:'',remarks:''});
+  currentCustomIndex = customItems.length-1; render();
+}
+function prevFromCustom() {
+  saveCurrentForm(); currentScreen = 'input'; currentStep = items.length-1; render();
+}
+function customNext() {
+  saveCurrentForm(); currentScreen = 'result'; render();
+}
+
+function triggerPrint() { setTimeout(() => window.print(),100); }
+
+async function openCameraScanner() {
+  saveCurrentForm();
+  const modal = document.getElementById('cameraModal');
+  const video = document.getElementById('cameraVideo');
+  const status = document.getElementById('cameraStatus');
+  modal.classList.remove('hidden');
+  document.getElementById('capturedImage').classList.add('hidden');
+  document.getElementById('capturedImage').src = '';
+  video.classList.remove('hidden');
+  document.getElementById('ocrResultPanel').classList.add('hidden');
+  status.textContent = 'カメラを準備しています…';
+
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('ブラウザカメラを利用できません。HTTPS接続を確認してください。');
+    }
+    if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video:{
+        facingMode:{ideal:'environment'},
+        width:{ideal:1920},
+        height:{ideal:1080}
+      },
+      audio:false
+    });
+    video.srcObject = cameraStream;
+    await video.play();
+    status.textContent = '銘板全体を画面に入れて撮影してください。';
+  } catch (err) {
+    status.textContent = `カメラを起動できません: ${err.message || err}`;
+  }
+}
+
+function closeCamera() {
+  if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+  cameraStream = null;
+  const video = document.getElementById('cameraVideo');
+  if (video) { video.srcObject = null; video.classList.remove('hidden'); }
+  const image = document.getElementById('capturedImage');
+  if (image) { image.src = ''; image.classList.add('hidden'); }
+  document.getElementById('ocrResultPanel').classList.add('hidden');
+  document.getElementById('cameraModal').classList.add('hidden');
+}
+
+function showCapturedImage(dataUrl) {
+  const video = document.getElementById('cameraVideo');
+  const image = document.getElementById('capturedImage');
+  video.classList.add('hidden');
+  image.src = dataUrl;
+  image.classList.remove('hidden');
+}
+
+function showOcrResultPanel(data) {
+  const panel = document.getElementById('ocrResultPanel');
+  const lines = (data.lines || []).map(x => String(x.text || '').trim()).filter(Boolean);
+  panel.textContent = '判定結果\n' +
+    '機種名：' + (data.model_name || '判定できず') + '\n' +
+    'シリアルNo：' + (data.serial_no || '判定できず') + '\n' +
+    'Ver・備考：' + (data.version || '判定できず') + '\n\n' +
+    'OCRで読み取った文字\n' + (lines.join('\n') || '文字を認識できませんでした。');
+  panel.classList.remove('hidden');
+}
+
+function useNativeCameraFallback() {
+  closeCamera();
+  document.getElementById('nativeCameraInput').click();
+}
+
+async function postImageForOcr(blob,filename='nameplate.jpg') {
+  const formData = new FormData();
+  formData.append('image',blob,filename);
+  const response = await fetch('/api/ocr',{method:'POST',body:formData});
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `OCRサーバーエラー (${response.status})`);
+  return data;
+}
+
+function applyOcrFields(data) {
+  const model = String(data.model_name || '').trim().toUpperCase();
+  const serial = String(data.serial_no || '').trim().toUpperCase();
+  const version = String(data.version || '').trim().toUpperCase();
+
+  if (!model && !serial && !version) {
+    const lines = (data.lines || [])
+      .map(line => String(line.text || '').trim()).filter(Boolean);
+    throw new Error(
+      '機種名・シリアルNo・Verを自動判定できませんでした。\nOCR結果：\n' +
+      (lines.join('\n') || '文字を認識できませんでした。')
+    );
+  }
+
+  const ids = currentScreen === 'custom'
+    ? {model:'c-model',serial:'c-serial',remarks:'c-remarks'}
+    : {model:'f-model',serial:'f-serial',remarks:'f-remarks'};
+  if (model) document.getElementById(ids.model).value = model;
+  if (serial) document.getElementById(ids.serial).value = serial;
+  if (version) document.getElementById(ids.remarks).value = version;
+  saveCurrentForm();
+  return {model,serial,version};
+}
+
+function showOcrSummary(result) {
+  alert(
+    '銘板の読み取り結果\n\n' +
+    '機種名：'+(result.model || '判定できず')+'\n' +
+    'シリアルNo：'+(result.serial || '判定できず')+'\n' +
+    'Ver・備考：'+(result.version || '判定できず')
+  );
+}
+
+async function captureAndAnalyze() {
+  const video = document.getElementById('cameraVideo');
+  const status = document.getElementById('cameraStatus');
+  const canvas = document.getElementById('scanCanvas');
+  const button = document.getElementById('captureButton');
+  if (!video.videoWidth || !video.videoHeight) {
+    status.textContent = 'カメラ映像がありません。カメラの許可と接続を確認してください。';
+    return;
+  }
+  button.disabled = true;
+  try {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+    const still = canvas.toDataURL('image/jpeg',0.96);
+    showCapturedImage(still);
+    status.textContent = '撮影画像を表示したまま解析しています…';
+    const blob = await new Promise((resolve,reject) => canvas.toBlob(
+      result => result ? resolve(result) : reject(new Error('撮影画像を作成できませんでした。')),
+      'image/jpeg',0.96
+    ));
+    const data = await postImageForOcr(blob);
+    const result = applyOcrFields(data);
+    showOcrResultPanel(data);
+    status.textContent = '判定完了。撮影画像と読み取り文字を確認してください。閉じるボタンで戻ります。';
+  } catch (err) {
+    status.textContent = `判定できませんでした。撮影画像は表示したままです：${err.message || err}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function handleNativeCapture(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const modal = document.getElementById('cameraModal');
+  const status = document.getElementById('cameraStatus');
+  const button = document.getElementById('captureButton');
+  modal.classList.remove('hidden');
+  button.disabled = true;
+  status.textContent = '撮影画像を表示したまま解析しています…';
+  try {
+    const dataUrl = await new Promise((resolve,reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('撮影画像を表示できませんでした。'));
+      reader.readAsDataURL(file);
+    });
+    showCapturedImage(dataUrl);
+    const data = await postImageForOcr(file,file.name || 'nameplate.jpg');
+    applyOcrFields(data);
+    showOcrResultPanel(data);
+    status.textContent = '判定完了。撮影画像と読み取り文字を確認してください。閉じるボタンで戻ります。';
+  } catch (err) {
+    status.textContent = `判定できませんでした。撮影画像は表示したままです：${err.message || err}`;
+  } finally {
+    button.disabled = false;
+    event.target.value = '';
+  }
+}
+
+function parseCsvLine(line) {
+  const values = [];
+  let value = '', quoted = false;
+  for (let i=0;i<line.length;i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (quoted && line[i+1] === '"') { value += '"'; i++; }
+      else quoted = !quoted;
+    } else if (ch === ',' && !quoted) {
+      values.push(value); value='';
+    } else value += ch;
+  }
+  values.push(value);
+  return values;
+}
+
+function loadCSVFile(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const lines = String(e.target.result).replace(/^\uFEFF/,'')
+        .split(/\r\n|\n/).filter(line => line.trim() !== '');
+      const clean = value => String(value || '').trim();
+
+      lines.forEach(line => {
+        const cols = parseCsvLine(line).map(clean);
+        if (cols[0].includes('製造指図書')) {
+          document.getElementById('docNo').value = cols[1] || '';
+          document.getElementById('customer').value = cols[3] || '';
+        } else if (cols[0] === '機種名') {
+          document.getElementById('modelName').value = cols[1] || '';
+          document.getElementById('unitNo').value = cols[3] || '';
+        } else if (cols[0] === '記入日') {
+          document.getElementById('entryDate').value = cols[1] || document.getElementById('entryDate').value;
+          document.getElementById('orderQty').value = cols[3] || '';
+        } else if (cols[2] === 'エレキ担当') {
+          document.getElementById('elecStaff').value = cols[3] || '';
+        }
+      });
+
+      const header = lines.findIndex(line => line.includes('No,製品型式') || line.includes('NO,製品型式'));
+      if (header >= 0) {
+        const loaded = [
+          {title:'電源ユニット',model:'',serial:'',remarks:''},
+          {title:'CPU',model:'',serial:'',remarks:''},
+          {title:'ベースユニット',model:'',serial:'',remarks:''},
+          {title:'LIO-04',model:'',serial:'',remarks:''}
+        ];
+        const loadedCustom = [];
+
+        lines.slice(header+1).forEach(line => {
+          const cols = parseCsvLine(line).map(clean);
+          const no = parseInt(cols[0],10);
+          if (!Number.isFinite(no) || no < 1 || no > 25) return;
+          const row = {
+            model:cols[1] || '', serial:cols[2] || '',
+            title:cols[3] || '', remarks:cols[4] || ''
+          };
+
+          if (no <= 4) {
+            loaded[no-1].model = row.model;
+            loaded[no-1].serial = row.serial;
+            loaded[no-1].remarks = row.remarks;
+          } else if (row.model || row.serial || row.title || row.remarks) {
+            const record = {title:row.title || `ユニット${loadedCustom.length+1}`,model:row.model,serial:row.serial,remarks:row.remarks};
+            if (/^LIO-04(?:\s|追加)/i.test(record.title)) loaded.push(record);
+            else loadedCustom.push(record);
+          }
+        });
+
+        items = loaded.slice(0,25);
+        customItems = loadedCustom.slice(0,Math.max(0,25-items.length));
+        currentScreen = 'home';
+        isStarted = false;
+      }
+
+      alert('CSVファイルからデータを復元しました！');
+    } catch (err) {
+      alert(`CSVファイルの読み込みに失敗しました。\n${err.message || err}`);
+    } finally {
+      document.getElementById('csvFileInput').value = '';
+    }
+  };
+  reader.readAsText(file,'UTF-8');
+}
+
+function saveCSV() {
+  saveCurrentForm();
+  const docNo = document.getElementById('docNo').value.toUpperCase();
+  const modelName = document.getElementById('modelName').value.toUpperCase();
+  const unitNo = document.getElementById('unitNo').value || '1';
+  const filename = `${yy}${mm}${dd}_${modelName || '機種'}_${docNo || '指図書'}_${unitNo}.csv`;
+  const quote = value => `"${String(value ?? '').replace(/"/g,'""')}"`;
+
+  let csv = '\uFEFF';
+  csv += `製造指図書No,${quote(docNo)},客先名,${quote(document.getElementById('customer').value.toUpperCase())}\n`;
+  csv += `機種名,${quote(modelName)},号機No,${quote(unitNo)}\n`;
+  csv += `記入日,${quote(document.getElementById('entryDate').value)},発注台数,${quote(document.getElementById('orderQty').value)}\n`;
+  csv += `,,エレキ担当,${quote(document.getElementById('elecStaff').value.toUpperCase())}\n\n`;
+  csv += 'No,製品型式,シリアルNo,機器名称,備考\n';
+
+  const rows = allEquipmentItems();
+  for (let i=0;i<25;i++) {
+    const item = rows[i] || {model:'',serial:'',title:'',remarks:''};
+    csv += `${i+1},${quote(item.model)},${quote(item.serial)},${quote(item.title || '')},${quote(item.remarks || '')}\\n`;
+  }
+
+  const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+window.addEventListener('DOMContentLoaded',() => {
+  document.getElementById('entryDate').value = `${now.getFullYear()}/${mm}/${dd}`;
+  lastUnitNo = document.getElementById('unitNo').value.trim();
+  document.getElementById('unitNo').addEventListener('change',handleUnitNoChange);
+  render();
+});
+
+window.addEventListener('beforeunload',() => {
+  if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+});
+</script>
+</body>
+</html>
