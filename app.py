@@ -8,6 +8,7 @@ import re
 import unicodedata
 
 BASE_DIR = Path(__file__).resolve().parent
+APP_VERSION = '2026.11.26-r1' 
 app = Flask(__name__, static_folder=None)
 app.config['MAX_CONTENT_LENGTH'] = 12 * 1024 * 1024  # 12 MB
 ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
@@ -62,12 +63,31 @@ def extract_fields(lines):
     }
 
 @app.get('/')
+@app.get('/index.html')
 def home():
+    # PCとスマートフォンで同じHTMLを返す。
     return send_from_directory(BASE_DIR, 'index.html')
+
+@app.get('/styles.css')
+def styles():
+    return send_from_directory(BASE_DIR, 'styles.css')
+
+@app.get('/manifest.json')
+def manifest():
+    return send_from_directory(BASE_DIR, 'manifest.json')
+
+@app.after_request
+def disable_stale_screen_cache(response):
+    # 旧版HTML/CSSがスマートフォンに残らないようにする。
+    if request.path in ('/', '/index.html', '/styles.css', '/manifest.json', '/api/health'):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
 
 @app.get('/api/health')
 def health():
-    return jsonify({'ok': True, 'engine': 'PaddleOCR', 'language': 'japan'})
+    return jsonify({'ok': True, 'version': APP_VERSION, 'engine': 'PaddleOCR', 'language': 'japan'})
 
 @app.post('/api/ocr')
 def run_ocr():

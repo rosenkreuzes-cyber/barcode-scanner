@@ -3,10 +3,11 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#042219">
 <title>シリアル記入シート - QuickScan DB</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.json">
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 .hidden { display:none!important; }
@@ -31,6 +32,18 @@ input { color-scheme:dark; text-transform:uppercase; }
   position:relative; width:100%; aspect-ratio:4/3;
   background:#000; overflow:hidden; border-radius:10px;
 }
+#view-result .print-area { overflow-x:auto; }
+#view-result .print-area > table { min-width:500px; }
+input, button { font:inherit; }
+input { min-width:0; }
+input[type="text"], input[type="number"] { font-size:16px; }
+.version-tag { font-size:11px; text-align:center; opacity:.75; padding:6px 0; }
+#device-name-field.hidden { display:none!important; }
+@media (max-width:360px) {
+  #view-result .no-print { gap:8px; }
+  #view-home .flex.gap-2 { flex-wrap:wrap; }
+  #view-home .flex.gap-2 > .flex-1 { min-width:125px; }
+}
 #cameraVideo, #capturedImage {
   position:absolute; inset:0; display:block;
   width:100%; height:100%; max-height:none;
@@ -50,6 +63,9 @@ button:disabled { opacity:.55; cursor:wait; }
     margin:0!important; padding:0!important; box-shadow:none!important;
     background:white!important;
   }
+  #view-result .print-area { overflow:visible!important; }
+  #view-result .print-area > table { min-width:0!important; }
+  .version-tag { display:none!important; }
   table { width:100%!important; border-collapse:collapse!important; table-layout:fixed!important; }
   th,td {
     border:1px solid #000!important; padding:2px 4px!important;
@@ -62,6 +78,7 @@ button:disabled { opacity:.55; cursor:wait; }
 </style>
 </head>
 <body class="p-3 max-w-xl mx-auto w-full">
+<div id="appVersionTag" class="version-tag no-print">QuickScan DB — 画面版 2026.11.26-r1</div>
 
 <input type="file" id="csvFileInput" accept=".csv" class="hidden" onchange="loadCSVFile(event)">
 <input type="file" id="nativeCameraInput" accept="image/*" capture="environment" class="hidden" onchange="handleNativeCapture(event)">
@@ -159,6 +176,9 @@ button:disabled { opacity:.55; cursor:wait; }
     </div>
   </div>
 
+  <div class="text-xs opacity-80 text-center">入力内容は、この端末のブラウザにも自動保存されます（共有端末では注意）。</div>
+  <button type="button" onclick="discardDraft()" class="w-full border border-[#E6DAA6]/40 text-sm py-2 rounded-xl">端末の保存データを消去</button>
+
   <button type="button" onclick="goToInput()"
     class="w-full bg-[#F5D887] text-[#042219] font-bold py-4 rounded-full text-lg shadow-xl mt-4">
     入力を開始 (電源ユニットへ)
@@ -192,6 +212,11 @@ button:disabled { opacity:.55; cursor:wait; }
     <div>
       <label class="block text-sm font-bold mb-1">製品型式</label>
       <input id="f-model" type="text" placeholder="型式"
+        class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5">
+    </div>
+    <div id="device-name-field" class="hidden">
+      <label class="block text-sm font-bold mb-1">機器名称（各種機器のみ・任意）</label>
+      <input id="f-title" type="text" placeholder="例: 通信ユニット"
         class="w-full bg-[#042219] border border-[#E6DAA6]/40 rounded-xl px-3 py-2.5">
     </div>
     <div>
@@ -294,16 +319,20 @@ const yy = String(now.getFullYear()).slice(-2);
 const mm = String(now.getMonth()+1).padStart(2,'0');
 const dd = String(now.getDate()).padStart(2,'0');
 
+const APP_VERSION = '2026.11.26-r1';
+const STORAGE_KEY = 'quickscan-db-draft-v1';
+const BASIC_FIELD_IDS = ['docNo','modelName','entryDate','customer','unitNo','orderQty','elecStaff'];
 const MAX_DEVICES = 25;
 const PRINT_STEP = 999;
 const BASE_TITLES = ['電源ユニット', 'CPU', 'ベースユニット', 'LIO-04'];
 const emptyDevice = (title, kind) => ({title, kind, model:'', serial:'', remarks:''});
 const baseDevices = () => BASE_TITLES.map(title => emptyDevice(title, title === 'LIO-04' ? 'lio' : 'base'));
-const customDevice = number => emptyDevice(`ユニット登録${number}`, 'custom');
+const customDevice = () => emptyDevice('', 'custom');
 const firstCustomIndex = () => items.findIndex(item => item.kind === 'custom');
 const readUnitNo = () => document.getElementById('unitNo').value || '1';
+const oldPlaceholder = name => /^(?:ユニット登録|各種機器追加)\s*\d+$/u.test(String(name).trim());
 
-let items = [...baseDevices(), customDevice(1)];
+let items = [...baseDevices(), customDevice()];
 let registeredUnitNo = null;
 let currentStep = 0;
 let isStarted = false;
@@ -316,6 +345,9 @@ function saveCurrentForm() {
   items[currentStep].model = document.getElementById('f-model').value.toUpperCase();
   items[currentStep].serial = document.getElementById('f-serial').value.toUpperCase();
   items[currentStep].remarks = document.getElementById('f-remarks').value;
+  if (items[currentStep].kind === 'custom') {
+    items[currentStep].title = document.getElementById('f-title').value.trim();
+  }
 }
 
 function escapeHtml(value) {
@@ -347,6 +379,8 @@ function render() {
       : `${item.title} 画面`;
     document.getElementById('step-indicator').innerText = `${currentStep+1} / ${items.length}`;
     document.getElementById('f-model').value = item.model || '';
+    document.getElementById('f-title').value = isCustom ? (item.title || '') : '';
+    document.getElementById('device-name-field').classList.toggle('hidden', !isCustom);
     document.getElementById('f-serial').value = item.serial || '';
     document.getElementById('f-remarks').value = item.remarks || '';
     document.getElementById('add-lio-wrap').classList.toggle('hidden', item.kind !== 'lio');
@@ -369,9 +403,9 @@ function render() {
   tbody.innerHTML = '';
   for (let i=0;i<MAX_DEVICES;i++) {
     const row = items[i] || emptyDevice('', '');
-    const isCustomPlaceholder = row.kind === 'custom' && /^ユニット登録\d+$/.test(row.title);
     const printRemarks = row.remarks?.trim() ? row.remarks : '';
-    const title = !row.model.trim() ? '' : isCustomPlaceholder ? printRemarks : row.title;
+    // 機器名称には備考を流用しない。型式が空欄なら名称も必ず空欄。
+    const title = visibleDeviceName(row);
     tbody.innerHTML += `<tr class="h-[15px]">
       <td class="border border-black text-center font-bold bg-gray-50">${i+1}</td>
       <td class="border border-black px-1 font-bold">${escapeHtml(row.model)}</td>
@@ -387,33 +421,37 @@ function goToTop() {
   closeCamera();
   // 基本情報と、同じ号機の機器情報はそのまま保持する。
   currentStep=0; isStarted=false; render();
+  persistDraft();
 }
 function syncUnitNo() {
   const unitNo = readUnitNo();
   if (registeredUnitNo !== null && registeredUnitNo !== unitNo) {
     closeCamera();
-    items = [...baseDevices(), customDevice(1)];
-    for (const id of ['f-model', 'f-serial', 'f-remarks']) {
+    items = [...baseDevices(), customDevice()];
+    for (const id of ['f-model', 'f-title', 'f-serial', 'f-remarks']) {
       document.getElementById(id).value = '';
     }
     document.getElementById('p-tbody').innerHTML = '';
     currentStep = 0;
   }
   registeredUnitNo = unitNo;
+  persistDraft();
 }
 function goToInput() {
   saveCurrentForm();
   syncUnitNo();
   currentStep=0; isStarted=true; render();
+  persistDraft();
 }
 function nextStep() {
   saveCurrentForm();
   currentStep = currentStep < items.length-1 ? currentStep+1 : PRINT_STEP;
   render();
+  persistDraft();
 }
 function prevStep() {
   saveCurrentForm();
-  if (currentStep > 0) { currentStep--; render(); }
+  if (currentStep > 0) { currentStep--; render(); persistDraft(); }
   else goToTop();
 }
 function addLioDevice() {
@@ -426,15 +464,17 @@ function addLioDevice() {
   // 次の画面にLIO-04を追加し、各種機器の画面より前に配置する。
   items.splice(++currentStep, 0, emptyDevice('LIO-04', 'lio'));
   render();
+  persistDraft();
 }
 
 function addDevice() {
   if (!isStarted || items[currentStep]?.kind !== 'custom') return;
   saveCurrentForm();
   if (items.length >= MAX_DEVICES) { alert(`登録できる機器は最大${MAX_DEVICES}件です。`); return; }
-  items.push(customDevice(items.length - firstCustomIndex() + 1));
+  items.push(customDevice());
   currentStep = items.length-1;
   render();
+  persistDraft();
 }
 function triggerPrint() { setTimeout(() => window.print(),100); }
 
@@ -543,6 +583,7 @@ function applyOcrFields(data) {
   if (serial) document.getElementById('f-serial').value = serial;
   if (version) document.getElementById('f-remarks').value = version;
   saveCurrentForm();
+  persistDraft();
   return true;
 }
 
@@ -608,97 +649,160 @@ async function handleNativeCapture(event) {
   }
 }
 
-function parseCsvLine(line) {
-  const values = [];
-  let value = '', quoted = false;
-  for (let i=0;i<line.length;i++) {
-    const ch = line[i];
+function visibleDeviceName(item) {
+  return String(item.model || '').trim() ? String(item.title || '').trim() : '';
+}
+
+function persistDraft() {
+  const basics = {};
+  for (const id of BASIC_FIELD_IDS) basics[id] = document.getElementById(id).value;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      schema:1, basics, registeredUnitNo, items
+    }));
+  } catch (err) {
+    // ローカル保存を禁止しているブラウザーでも通常操作とCSV出力は可能。
+  }
+}
+
+function restoreDraft() {
+  try {
+    const draft = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    if (!draft || draft.schema !== 1 || !draft.basics || !Array.isArray(draft.items)) return;
+    for (const id of BASIC_FIELD_IDS) {
+      if (typeof draft.basics[id] === 'string') document.getElementById(id).value = draft.basics[id];
+    }
+    if (draft.items.length < 4 || draft.items.length > MAX_DEVICES) return;
+    const defaults = baseDevices();
+    for (let i=0;i<4;i++) {
+      const old = draft.items[i];
+      if (!old || typeof old !== 'object') return;
+      for (const field of ['model','serial','remarks']) defaults[i][field] = String(old[field] || '');
+    }
+    const extras = draft.items.slice(4).filter(item => item && ['lio','custom'].includes(item.kind))
+      .map(item => ({
+        title:item.kind === 'lio' ? 'LIO-04' : (oldPlaceholder(item.title) ? '' : String(item.title || '')),
+        kind:item.kind, model:String(item.model || ''),
+        serial:String(item.serial || ''), remarks:String(item.remarks || '')
+      }));
+    items = [...defaults, ...extras.filter(item => item.kind === 'lio'), ...extras.filter(item => item.kind === 'custom')];
+    if (!items.some(item => item.kind === 'custom') && items.length < MAX_DEVICES) items.push(customDevice());
+    registeredUnitNo = draft.registeredUnitNo === null ? null : String(draft.registeredUnitNo || '1');
+    // 入力途中の号機Noが別なら旧号機のデータは復元しない。
+    if (registeredUnitNo !== null && readUnitNo() !== registeredUnitNo) {
+      items = [...baseDevices(), customDevice()];
+      registeredUnitNo = readUnitNo();
+    }
+  } catch (err) {
+    // 破損した保存データは使わない。
+  }
+}
+
+function discardDraft() {
+  if (!confirm('この端末に保存された基本情報・機器情報をすべて消去しますか？')) return;
+  closeCamera();
+  try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+  for (const id of BASIC_FIELD_IDS) document.getElementById(id).value = '';
+  document.getElementById('entryDate').value = `${now.getFullYear()}/${mm}/${dd}`;
+  items = [...baseDevices(), customDevice()];
+  registeredUnitNo = null;
+  currentStep = 0;
+  isStarted = false;
+  render();
+}
+
+// 引用符内の改行・カンマ・二重引用符にも対応するCSV読み取り。
+function parseCsvRecords(source) {
+  const text = String(source).replace(/^\uFEFF/, '');
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  for (let i=0; i<text.length; i++) {
+    const ch = text[i];
     if (ch === '"') {
-      if (quoted && line[i+1] === '"') { value += '"'; i++; }
+      if (quoted && text[i+1] === '"') { field += '"'; i++; }
       else quoted = !quoted;
     } else if (ch === ',' && !quoted) {
-      values.push(value); value='';
-    } else value += ch;
+      row.push(field); field = '';
+    } else if ((ch === '\n' || ch === '\r') && !quoted) {
+      row.push(field); field='';
+      if (row.some(value => value.trim())) rows.push(row);
+      row = [];
+      if (ch === '\r' && text[i+1] === '\n') i++;
+    } else {
+      field += ch;
+    }
   }
-  values.push(value);
-  return values;
+  if (quoted) throw new Error('CSVの引用符が閉じられていません。');
+  row.push(field);
+  if (row.some(value => value.trim())) rows.push(row);
+  return rows;
 }
 
 function loadCSVFile(event) {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
-
   const reader = new FileReader();
   reader.onload = e => {
     try {
-      const lines = String(e.target.result).replace(/^\uFEFF/,'')
-        .split(/\r\n|\n/).filter(line => line.trim() !== '');
+      const rows = parseCsvRecords(e.target.result);
       const clean = value => String(value || '').trim();
-
-      const header = lines.findIndex(line => line.includes('No,製品型式') || line.includes('NO,製品型式'));
+      const header = rows.findIndex(cols => clean(cols[0]).toLowerCase() === 'no' && clean(cols[1]) === '製品型式');
+      if (header < 0) throw new Error('このアプリのCSV形式（No,製品型式,...）ではありません。');
       const restoredFields = {};
-      (header < 0 ? lines : lines.slice(0, header)).forEach(line => {
-        const cols = parseCsvLine(line).map(clean);
-        if (cols[0].includes('製造指図書')) {
-          restoredFields.docNo = cols[1] || '';
-          restoredFields.customer = cols[3] || '';
-        } else if (cols[0] === '機種名') {
-          restoredFields.modelName = cols[1] || '';
-          restoredFields.unitNo = cols[3] || '';
-        } else if (cols[0] === '記入日') {
-          if (cols[1]) restoredFields.entryDate = cols[1];
-          restoredFields.orderQty = cols[3] || '';
-        } else if (cols[2] === 'エレキ担当') {
-          restoredFields.elecStaff = cols[3] || '';
+      rows.slice(0,header).forEach(cols => {
+        const values = cols.map(clean);
+        if (values[0].includes('製造指図書')) {
+          restoredFields.docNo = values[1] || '';
+          restoredFields.customer = values[3] || '';
+        } else if (values[0] === '機種名') {
+          restoredFields.modelName = values[1] || '';
+          restoredFields.unitNo = values[3] || '';
+        } else if (values[0] === '記入日') {
+          if (values[1]) restoredFields.entryDate = values[1];
+          restoredFields.orderQty = values[3] || '';
+        } else if (values[2] === 'エレキ担当') {
+          restoredFields.elecStaff = values[3] || '';
         }
       });
-
-      let restoredItems = null;
-      if (header >= 0) {
-        const standard = baseDevices();
-        const extraRows = new Map();
-        lines.slice(header+1).forEach(line => {
-          const rawCols = parseCsvLine(line);
-          const cols = rawCols.map(clean);
-          const no = parseInt(cols[0],10);
-          if (!Number.isFinite(no) || no < 1 || no > MAX_DEVICES) return;
-          const data = {model:cols[1] || '', serial:cols[2] || '', remarks:cols[4] ? rawCols[4] : ''};
-          const title = cols[3] || '';
-          if (no <= standard.length) {
-            Object.assign(standard[no-1], data);
-          } else if (title || data.model || data.serial || data.remarks) {
-            extraRows.set(no, {title, ...data});
-          }
-        });
-        const extraLio = [];
-        const customs = [];
-        [...extraRows.entries()].sort((a, b) => a[0] - b[0]).forEach(([, row]) => {
-          if (/^LIO(?:-04)?(?:追加\s*\d+)?$/i.test(row.title)) {
-            extraLio.push({...row, title:'LIO-04', kind:'lio'});
-          } else {
-            customs.push({...row, title:row.title || customDevice(customs.length+1).title, kind:'custom'});
-          }
-        });
-        if (!customs.length && standard.length + extraLio.length < MAX_DEVICES) {
-          customs.push(customDevice(1));
+      const standard = baseDevices();
+      const extraLio = [], customs = [];
+      const seen = new Set();
+      rows.slice(header+1).forEach(cols => {
+        const no = Number.parseInt(clean(cols[0]), 10);
+        if (!Number.isInteger(no) || no < 1 || no > MAX_DEVICES || seen.has(no)) return;
+        seen.add(no);
+        const data = {model:clean(cols[1]), serial:clean(cols[2]), remarks:String(cols[4] || '')};
+        const shownName = clean(cols[3]);
+        if (no <= 4) {
+          Object.assign(standard[no-1], data);
+          return;
         }
-        restoredItems = [...standard, ...extraLio, ...customs];
+        const explicitKind = clean(cols[5]).toLowerCase();
+        const kind = ['lio','custom'].includes(explicitKind)
+          ? explicitKind : (/^LIO(?:-04)?(?:追加\s*\d+)?$/i.test(shownName) ? 'lio' : 'custom');
+        const rawName = clean(cols[6]);
+        const title = kind === 'lio' ? 'LIO-04' : (oldPlaceholder(rawName || shownName) ? '' : (rawName || shownName));
+        const hasData = Boolean(data.model || data.serial || data.remarks || title);
+        // 新形式は空の追加枠も登録種別で復元。旧形式の空行は復元しない。
+        if (!hasData && !['lio','custom'].includes(explicitKind)) return;
+        (kind === 'lio' ? extraLio : customs).push({...data, title, kind});
+      });
+      let restoredItems = [...standard, ...extraLio, ...customs].slice(0,MAX_DEVICES);
+      if (!restoredItems.some(item => item.kind === 'custom') && restoredItems.length < MAX_DEVICES) {
+        restoredItems.push(customDevice());
       }
-
+      // CSV読込前に編集中だったフォーム値を保存しない。読込内容を直接画面へ反映。
       const wasPreview = isStarted && currentStep === PRINT_STEP;
       for (const [id, value] of Object.entries(restoredFields)) {
         document.getElementById(id).value = value;
       }
-      if (restoredItems) {
-        items = restoredItems;
-        registeredUnitNo = readUnitNo();
-      } else {
-        syncUnitNo();
+      items = restoredItems;
+      registeredUnitNo = readUnitNo();
+      if (isStarted) {
+        currentStep = wasPreview ? PRINT_STEP : Math.min(currentStep,items.length-1);
       }
-      if (wasPreview) {
-        currentStep = PRINT_STEP;
-        render();
-      }
+      render();
+      persistDraft();
       alert('CSVファイルからデータを復元しました！');
     } catch (err) {
       alert(`CSVファイルの読み込みに失敗しました。\n${err.message || err}`);
@@ -706,11 +810,16 @@ function loadCSVFile(event) {
       document.getElementById('csvFileInput').value = '';
     }
   };
+  reader.onerror = () => {
+    alert('CSVファイルを読み込めませんでした。');
+    document.getElementById('csvFileInput').value = '';
+  };
   reader.readAsText(file,'UTF-8');
 }
 
 function saveCSV() {
   saveCurrentForm();
+  persistDraft();
   const docNo = document.getElementById('docNo').value.toUpperCase();
   const modelName = document.getElementById('modelName').value.toUpperCase();
   const unitNo = readUnitNo();
@@ -718,15 +827,16 @@ function saveCSV() {
   const quote = value => `"${String(value ?? '').replace(/"/g,'""')}"`;
 
   let csv = '\uFEFF';
-  csv += `製造指図書No,${quote(docNo)},客先名,${quote(document.getElementById('customer').value.toUpperCase())}\n`;
-  csv += `機種名,${quote(modelName)},号機No,${quote(unitNo)}\n`;
-  csv += `記入日,${quote(document.getElementById('entryDate').value)},発注台数,${quote(document.getElementById('orderQty').value)}\n`;
-  csv += `,,エレキ担当,${quote(document.getElementById('elecStaff').value.toUpperCase())}\n\n`;
-  csv += 'No,製品型式,シリアルNo,機器名称,備考\n';
-
+  csv += `製造指図書No,${quote(docNo)},客先名,${quote(document.getElementById('customer').value.toUpperCase())}\r\n`;
+  csv += `機種名,${quote(modelName)},号機No,${quote(unitNo)}\r\n`;
+  csv += `記入日,${quote(document.getElementById('entryDate').value)},発注台数,${quote(document.getElementById('orderQty').value)}\r\n`;
+  csv += `,,エレキ担当,${quote(document.getElementById('elecStaff').value.toUpperCase())}\r\n\r\n`;
+  // 最初の5列は印刷内容と同じ。6・7列は入力画面を正確に復元するための管理情報。
+  csv += 'No,製品型式,シリアルNo,機器名称,備考,登録種別,機器名称入力値\r\n';
   for (let i=0;i<MAX_DEVICES;i++) {
     const item = items[i] || emptyDevice('', '');
-    csv += `${i+1},${quote(item.model)},${quote(item.serial)},${quote(item.title)},${quote(item.remarks)}\n`;
+    const nameInput = item.kind === 'custom' ? item.title : '';
+    csv += `${i+1},${quote(item.model)},${quote(item.serial)},${quote(visibleDeviceName(item))},${quote(item.remarks)},${quote(item.kind)},${quote(nameInput)}\r\n`;
   }
 
   const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
@@ -737,11 +847,24 @@ function saveCSV() {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 window.addEventListener('DOMContentLoaded',() => {
   document.getElementById('entryDate').value = `${now.getFullYear()}/${mm}/${dd}`;
+  restoreDraft();
+  for (const id of BASIC_FIELD_IDS) {
+    document.getElementById(id).addEventListener('input', () => {
+      if (id === 'unitNo') syncUnitNo();
+      else persistDraft();
+    });
+  }
+  for (const id of ['f-title','f-model','f-serial','f-remarks']) {
+    document.getElementById(id).addEventListener('input', () => {
+      saveCurrentForm();
+      persistDraft();
+    });
+  }
   render();
 });
 
